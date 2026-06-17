@@ -372,9 +372,9 @@ def chi2(y,yp): return float(np.sum((y-yp)**2/(np.abs(yp)+1e-10)))
 
 def do_fit(func,x,y,p0,bounds=(0,np.inf)):
     try:
-        po,_=curve_fit(func,x,y,p0=p0,bounds=bounds,maxfev=15000)
-        yp=func(x,*po); return po,r2s(y,yp),rmse(y,yp),chi2(y,yp)
-    except: return None,0.,999.,999.
+        po,pcov=curve_fit(func,x,y,p0=p0,bounds=bounds,maxfev=15000)
+        yp=func(x,*po); return po,pcov,r2s(y,yp),rmse(y,yp),chi2(y,yp)
+    except: return None,None,0.,999.,999.
 
 def get_c(a,method,**kw):
     if method=="beer": return (a/(kw['epsilon']*kw['path_length']))*kw['mw']*1000
@@ -434,6 +434,10 @@ with st.sidebar:
     <div style="font-size:.61rem;color:{TXM};text-align:center;line-height:1.9;font-family:{ff};">
         Langmuir · Freundlich · Temkin · D-R · Sips · BET<br>
         PFO · PSO · Elovich · Weber-Morris · Arrhenius
+    </div>
+    <hr style="border:none;border-top:1px solid {BR};margin:.6rem 0;">
+    <div style="text-align:center;font-size:.58rem;color:{AC};font-weight:600;font-family:{ff};letter-spacing:.3px;line-height:1.7;padding-bottom:.3rem;">
+        Diana Raie<br>Abdelbaset A. A. Diyab
     </div>""",unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -649,14 +653,14 @@ with tab_iso:
             funcs={"Langmuir":langmuir,"Freundlich":freundlich,"Temkin":temkin,"D-R":dr_model,"Sips":sips,"BET":bet_model}
             p0s={"Langmuir":[qe.max(),.1],"Freundlich":[1.,2.],"Temkin":[1.,qe.max()/5],
                  "D-R":[qe.max(),.5],"Sips":[qe.max(),.1,1.0],"BET":[Ce.max()*2,qe.max(),5.]}
-            bds={"Langmuir":(0,np.inf),"Freundlich":(0,np.inf),"Temkin":([0,0],[np.inf,np.inf]),
+            bds={"Langmuir":(0,np.inf),"Freundlich":(0,np.inf),"Temkin":([1e-10,1e-10],[np.inf,np.inf]),
                  "D-R":([0,1e-6],[np.inf,np.inf]),"Sips":([0,0,.1],[np.inf,np.inf,5.]),
                  "BET":([Ce.max()*1.01,0,0],[np.inf,np.inf,np.inf])}
 
             iso_res={}
             for nm in iso_sel:
                 if nm in("Temkin","D-R","Sips") and Ce.min()<=0: continue
-                po,rv,rm,rc=do_fit(funcs[nm],Ce,qe,p0s[nm],bds[nm])
+                po,pcov_,rv,rm,rc_=do_fit(funcs[nm],Ce,qe,p0s[nm],bds[nm])
                 if po is not None:
                     if nm=="Langmuir":
                         RL=1/(1+po[1]*Ce.max())
@@ -666,13 +670,13 @@ with tab_iso:
                     elif nm=="Temkin":
                         pms={"AT (L/g)":po[0],"B (J/mol)":po[1]}
                     elif nm=="D-R":
-                        E_kJ=po[1]/math.sqrt(2); pms={"qₘ (mg/g)":po[0],"E (kJ/mol)":E_kJ,
+                        E_kJ=po[1]; pms={"qₘ (mg/g)":po[0],"E (kJ/mol)":E_kJ,
                             "Type":"Physical" if E_kJ<8 else "Chemical"}
                     elif nm=="Sips":
                         pms={"qₘₐₓ (mg/g)":po[0],"Ks":po[1],"ns":po[2]}
                     else:  # BET
                         pms={"Cs (mg/L)":po[0],"qₘ (mg/g)":po[1],"C_BET":po[2]}
-                    iso_res[nm]={"popt":po,"r2":rv,"rmse":rm,"chi2":rc,"params":pms}
+                    iso_res[nm]={"popt":po,"pcov":pcov_,"r2":rv,"rmse":rm,"chi2":rc_,"params":pms}
 
             if iso_res:
                 best_iso=max(iso_res,key=lambda k:iso_res[k]["r2"])
@@ -802,13 +806,23 @@ with tab_iso:
                         <div class="param-row"><span class="param-key">{t("dq_mono")}</span><span class="param-val">{"✅" if mono else "⚠️"}</span></div>
                     </div>""",unsafe_allow_html=True)
 
-                    # Parameters
+                    # Parameters with 95% CI
                     st.markdown(f"<br><b style='color:{TXS};font-family:{ff};'>{t('parameters')}</b>",unsafe_allow_html=True)
                     for nm,res in srt:
                         with st.expander(nm,expanded=(nm==best_iso)):
-                            for pk,pv in res["params"].items():
-                                vs=f"{pv:.4f}" if isinstance(pv,float) else str(pv)
-                                st.markdown(f'<div class="param-row"><span class="param-key">{pk}</span><span class="param-val">{vs}</span></div>',unsafe_allow_html=True)
+                            popt_list=list(res["popt"])
+                            pcov_m=res.get("pcov")
+                            for i,(pk,pv) in enumerate(res["params"].items()):
+                                if isinstance(pv,float):
+                                    ci_str=""
+                                    if pcov_m is not None and i<len(popt_list):
+                                        try:
+                                            ci=1.96*float(np.sqrt(abs(pcov_m[i,i])))
+                                            if np.isfinite(ci): ci_str=f" <span style='color:{TXM};font-size:.7rem;'>±{ci:.4f}</span>"
+                                        except: pass
+                                    st.markdown(f'<div class="param-row"><span class="param-key">{pk}</span><span class="param-val">{pv:.4f}{ci_str}</span></div>',unsafe_allow_html=True)
+                                else:
+                                    st.markdown(f'<div class="param-row"><span class="param-key">{pk}</span><span class="param-val">{pv}</span></div>',unsafe_allow_html=True)
 
                     # Auto interpretation
                     st.markdown(f"<br><b style='color:{TXS};font-family:{ff};'>{t('auto_interp')}</b>",unsafe_allow_html=True)
@@ -836,6 +850,23 @@ with tab_iso:
                     </div>""",unsafe_allow_html=True)
 
                 st.session_state.update({"iso_results":iso_res,"iso_df":dd,"iso_best":best_iso})
+
+                # ── Prediction Tool ────────────────────────────────────────
+                st.markdown(f"<hr style='border:none;border-top:1px solid {BR};margin:1rem 0;'>",unsafe_allow_html=True)
+                with st.expander(f"🔮 qₑ Prediction Calculator",expanded=False):
+                    st.markdown(f'<div class="ada-eq">📐 Enter a Cₑ value → get predicted qₑ from every fitted model</div>',unsafe_allow_html=True)
+                    st.markdown("<br>",unsafe_allow_html=True)
+                    pred_ce=st.number_input("Enter Cₑ (mg/L)",value=float(round(Ce.mean(),3)),min_value=1e-6,format="%.4f",key="pred_ce")
+                    if pred_ce>0:
+                        st.markdown(f"<b style='color:{TXS};font-family:{ff};font-size:.87rem;'>Predicted qₑ (mg/g) at Cₑ = {pred_ce:.4f} mg/L</b>",unsafe_allow_html=True)
+                        for nm,res in sorted(iso_res.items(),key=lambda x:-x[1]["r2"]):
+                            try:
+                                q_pred=float(funcs[nm](np.array([pred_ce]),*res["popt"])[0])
+                                ib=(nm==best_iso)
+                                if np.isfinite(q_pred):
+                                    st.markdown(f'<div class="param-row"><span class="param-key" style="font-weight:{"700" if ib else "400"};color:{TX if ib else TXS};">{"★ " if ib else ""}{nm}</span><span class="param-val" style="color:{"#34d399" if ib else AC};">{q_pred:.4f} mg/g</span></div>',unsafe_allow_html=True)
+                            except: pass
+
         except Exception as e: st.error(f"Error: {e}")
     else: st.info(t("iso_min_pts"))
 
@@ -882,9 +913,11 @@ with tab_kin:
             Td,qt=df_k["Time"].values,df_k["qt"].values
 
             kp1,kp2,kp3,kp4=st.columns(4)
+            qt_last = float(qt[-1]) if len(qt)>0 else 0.0
+            td_last = float(Td[-1]) if len(Td)>0 else 0.0
             for col,(val,lbl,sub) in zip([kp1,kp2,kp3,kp4],[
-                (f"{qt[-1]:.3f}",t("qt_max"),t("duration")),
-                (f"{Td[-1]:.0f} min",t("max_time"),t("duration")),
+                (f"{qt_last:.3f}",t("qt_max"),t("duration")),
+                (f"{td_last:.0f} min",t("max_time"),t("duration")),
                 (f"{qt.max():.3f}",t("max_qt"),t("peak_kin")),
                 (f"{len(df_k)}",t("data_pts"),t("valid_meas"))]):
                 with col:
@@ -898,16 +931,16 @@ with tab_kin:
                   "Elovich":[1.,.5],"Weber-Morris":[qt.max()/np.sqrt(Td.max()+1e-6),.1]}
             kbds={"PFO":(0,np.inf),"PSO":(0,np.inf),
                   "Elovich":([1e-6,1e-6],[np.inf,np.inf]),"Weber-Morris":(-np.inf,np.inf)}
-            kpms={"PFO": lambda p:{"qₑ (mg/g)":p[0],"k₁ (min⁻¹)":p[1]},
-                  "PSO": lambda p:{"qₑ (mg/g)":p[0],"k₂ (g/mg·min)":p[1]},
+            kpms={"PFO": lambda p:{"qₑ (mg/g)":p[0],"k₁ (min⁻¹)":p[1],"t½ (min)":math.log(2)/p[1] if p[1]>0 else float("inf")},
+                  "PSO": lambda p:{"qₑ (mg/g)":p[0],"k₂ (g/mg·min)":p[1],"h₀ (mg/g·min)":p[1]*p[0]**2},
                   "Elovich":lambda p:{"α (mg/g·min)":p[0],"β (g/mg)":p[1]},
                   "Weber-Morris":lambda p:{"k_id":p[0],"C (mg/g)":p[1]}}
 
             kin_res={}
             for nm in kin_sel:
-                po,rv,rm,rc=do_fit(kfuncs[nm],Td,qt,kp0s[nm],kbds[nm])
+                po,pcov_k,rv,rm,rc_k=do_fit(kfuncs[nm],Td,qt,kp0s[nm],kbds[nm])
                 if po is not None:
-                    kin_res[nm]={"popt":po,"r2":rv,"rmse":rm,"chi2":rc,"params":kpms[nm](po)}
+                    kin_res[nm]={"popt":po,"pcov":pcov_k,"r2":rv,"rmse":rm,"chi2":rc_k,"params":kpms[nm](po)}
 
             if kin_res:
                 best_kin=max(kin_res,key=lambda k:kin_res[k]["r2"])
@@ -978,8 +1011,16 @@ with tab_kin:
                     st.markdown(f"<br><b style='color:{TXS};font-family:{ff};'>{t('parameters')}</b>",unsafe_allow_html=True)
                     for nm,res in sorted(kin_res.items(),key=lambda x:-x[1]["r2"]):
                         with st.expander(nm,expanded=(nm==best_kin)):
-                            for pk,pv in res["params"].items():
-                                st.markdown(f'<div class="param-row"><span class="param-key">{pk}</span><span class="param-val">{pv:.4f}</span></div>',unsafe_allow_html=True)
+                            popt_list_k=list(res["popt"])
+                            pcov_mk=res.get("pcov")
+                            for i,(pk,pv) in enumerate(res["params"].items()):
+                                ci_str_k=""
+                                if pcov_mk is not None and i<len(popt_list_k):
+                                    try:
+                                        ci_k=1.96*float(np.sqrt(abs(pcov_mk[i,i])))
+                                        if np.isfinite(ci_k): ci_str_k=f" <span style='color:{TXM};font-size:.7rem;'>±{ci_k:.4f}</span>"
+                                    except: pass
+                                st.markdown(f'<div class="param-row"><span class="param-key">{pk}</span><span class="param-val">{pv:.4f}{ci_str_k}</span></div>',unsafe_allow_html=True)
 
                     # Auto interp
                     st.markdown(f"<br><b style='color:{TXS};font-family:{ff};'>{t('auto_interp')}</b>",unsafe_allow_html=True)
@@ -1309,5 +1350,8 @@ st.markdown(f"""
     🔬 AdsorpLab Pro v2.0 &nbsp;·&nbsp;
     Langmuir · Freundlich · Temkin · D-R · Sips · BET &nbsp;·&nbsp;
     PFO · PSO · Elovich · Weber-Morris · Arrhenius &nbsp;·&nbsp;
-    R² · RMSE · χ² · Linear Transforms · Auto-Interpretation
+    R² · RMSE · χ² · Linear Transforms · Auto-Interpretation<br>
+    <span style="font-size:.72rem;color:{AC};font-weight:600;letter-spacing:.3px;">
+        Developed by Diana Raie &amp; Abdelbaset A. A. Diyab
+    </span>
 </div>""",unsafe_allow_html=True)
