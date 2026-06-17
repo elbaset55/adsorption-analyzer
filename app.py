@@ -407,10 +407,10 @@ with st.sidebar:
 
     c1,c2=st.columns(2)
     with c1:
-        if st.button(t("lang_btn"),use_container_width=True,key="lang_t"):
+        if st.button(t("lang_btn"),width="stretch",key="lang_t"):
             st.session_state.lang="ar" if st.session_state.lang=="en" else "en"; st.rerun()
     with c2:
-        if st.button(t("dark_btn") if is_dark else t("light_btn"),use_container_width=True,key="thm_t"):
+        if st.button(t("dark_btn") if is_dark else t("light_btn"),width="stretch",key="thm_t"):
             st.session_state.dark=not st.session_state.dark; st.rerun()
 
     st.markdown(f'<div class="sb-section">{t("cal_settings")}</div>',unsafe_allow_html=True)
@@ -431,9 +431,9 @@ with st.sidebar:
     mk_sz=st.slider(t("marker_size"),5,16,9)
 
     st.markdown(f'<div class="sb-section">{t("quick_actions")}</div>',unsafe_allow_html=True)
-    if st.button(t("demo_iso"),use_container_width=True):
+    if st.button(t("demo_iso"),width="stretch"):
         st.session_state.iso_data=DEMO_ISO.copy(); st.toast(t("demo_loaded"),icon="🧪")
-    if st.button(t("demo_kin"),use_container_width=True):
+    if st.button(t("demo_kin"),width="stretch"):
         st.session_state.kin_data=DEMO_KIN.copy(); st.toast(t("demo_loaded"),icon="⏱")
 
     st.markdown(f"""
@@ -595,7 +595,7 @@ with tab_cal:
         fg=go.Figure(); fg.add_trace(go.Scatter(x=cr,y=ar,mode='lines',
             line=dict(color=AC,width=2.5),fill='tozeroy',fillcolor=ACB))
         fg.update_layout(**PTBASE,height=270,xaxis_title=t("conc_mgl"),yaxis_title=t("absorbance"),showlegend=False)
-        st.plotly_chart(fg,use_container_width=True)
+        st.plotly_chart(fg,width="stretch")
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  ISOTHERMS
@@ -638,7 +638,7 @@ with tab_iso:
             except Exception as e: st.error(str(e))
     else:
         st.session_state.iso_data=st.data_editor(st.session_state.iso_data,num_rows="dynamic",
-            use_container_width=True,key="ied",
+            width="stretch",key="ied",
             column_config={"C0":st.column_config.NumberColumn("C₀ (mg/L)",format="%.3f"),
                            "Absorbance":st.column_config.NumberColumn("Absorbance",format="%.4f")})
 
@@ -728,7 +728,7 @@ with tab_iso:
                         except: pass
                     fig_i.update_layout(**PTBASE,height=360,
                         xaxis_title="Cₑ (mg/L)",yaxis_title="qₑ (mg/g)")
-                    st.plotly_chart(fig_i,use_container_width=True)
+                    st.plotly_chart(fig_i,width="stretch")
 
                     # R² comparison bar chart
                     st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('r2_chart')}</b>",unsafe_allow_html=True)
@@ -743,7 +743,7 @@ with tab_iso:
                     fig_bar.update_layout(**PTBASE,height=230,showlegend=False)
                     fig_bar.update_yaxes(gridcolor=PG)
                     fig_bar.update_annotations(font_color=TXS)
-                    st.plotly_chart(fig_bar,use_container_width=True)
+                    st.plotly_chart(fig_bar,width="stretch")
 
                     # Linear transform plots
                     st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('linear_plots')}</b>",unsafe_allow_html=True)
@@ -761,7 +761,7 @@ with tab_iso:
                         fig_ll.update_layout(**PTBASE,height=220,
                             title=dict(text=t("langmuir_linear"),font=dict(size=11,color=TXS)),
                             xaxis_title="Cₑ (mg/L)",yaxis_title="Cₑ/qₑ",showlegend=True)
-                        st.plotly_chart(fig_ll,use_container_width=True)
+                        st.plotly_chart(fig_ll,width="stretch")
                     with lt2:
                         # Freundlich linear: ln(qe) vs ln(Ce)
                         mask=Ce>0; lnCe=np.log(Ce[mask]); lnqe=np.log(qe[mask])
@@ -776,7 +776,7 @@ with tab_iso:
                         fig_fl.update_layout(**PTBASE,height=220,
                             title=dict(text=t("freundlich_linear"),font=dict(size=11,color=TXS)),
                             xaxis_title="ln Cₑ",yaxis_title="ln qₑ",showlegend=True)
-                        st.plotly_chart(fig_fl,use_container_width=True)
+                        st.plotly_chart(fig_fl,width="stretch")
 
                     # D-R & Temkin linear transforms (new row)
                     lt3,lt4=st.columns(2,gap="small")
@@ -803,7 +803,7 @@ with tab_iso:
                             fig_dr_lin.update_layout(**PTBASE,height=220,
                                 title=dict(text="D-R Linear: ln(qₑ) vs ε²",font=dict(size=11,color=TXS)),
                                 xaxis_title="ε² (kJ²/mol²)",yaxis_title="ln qₑ",showlegend=True)
-                            st.plotly_chart(fig_dr_lin,use_container_width=True)
+                            st.plotly_chart(fig_dr_lin,width="stretch")
                         except Exception as _e_dr:
                             st.info(f"D-R linear plot: {_e_dr}")
                     with lt4:
@@ -821,7 +821,7 @@ with tab_iso:
                             fig_tm_lin.update_layout(**PTBASE,height=220,
                                 title=dict(text="Temkin Linear: qₑ vs ln(Cₑ)",font=dict(size=11,color=TXS)),
                                 xaxis_title="ln Cₑ",yaxis_title="qₑ (mg/g)",showlegend=True)
-                            st.plotly_chart(fig_tm_lin,use_container_width=True)
+                            st.plotly_chart(fig_tm_lin,width="stretch")
                         except Exception as _e_tm:
                             st.info(f"Temkin linear plot: {_e_tm}")
 
@@ -838,12 +838,12 @@ with tab_iso:
                         fig_r.add_hline(y=0,line_dash="dash",line_color="rgba(148,163,184,0.3)")
                         fig_r.update_layout(**PTBASE,height=200,
                             xaxis_title="Cₑ",yaxis_title="Residuals")
-                        st.plotly_chart(fig_r,use_container_width=True)
+                        st.plotly_chart(fig_r,width="stretch")
 
                     st.markdown(f"<b style='color:{TXS};font-size:.86rem;font-family:{ff};'>{t('computed_data')}</b>",unsafe_allow_html=True)
                     dd=df_i[["C0","Absorbance","Ce","qe","Rem%"]].copy().round(4)
                     dd.columns=["C₀","Abs","Cₑ (mg/L)","qₑ (mg/g)","Rem%"]
-                    st.dataframe(dd,use_container_width=True,height=190)
+                    st.dataframe(dd,width="stretch",height=190)
 
                 with st_col:
                     st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('model_ranking')}</b>",unsafe_allow_html=True)
@@ -971,7 +971,7 @@ with tab_kin:
             except Exception as e: st.error(str(e))
     else:
         st.session_state.kin_data=st.data_editor(st.session_state.kin_data,num_rows="dynamic",
-            use_container_width=True,key="ked",
+            width="stretch",key="ked",
             column_config={"Time":st.column_config.NumberColumn("Time (min)",format="%.1f"),
                            "Absorbance":st.column_config.NumberColumn("Absorbance",format="%.4f")})
 
@@ -1030,7 +1030,7 @@ with tab_kin:
                             name=f"{nm} R²={res['r2']:.4f}"+(" ★" if ib else ""),
                             line=dict(color=PALETTE[i],width=3 if ib else 1.8,dash="solid" if ib else "dot")))
                     fig_k.update_layout(**PTBASE,height=340,xaxis_title="Time (min)",yaxis_title="qt (mg/g)")
-                    st.plotly_chart(fig_k,use_container_width=True)
+                    st.plotly_chart(fig_k,width="stretch")
 
                     # R² bar
                     st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('r2_chart')}</b>",unsafe_allow_html=True)
@@ -1039,7 +1039,7 @@ with tab_kin:
                         text=[f"{v:.4f}" for v in kr2],textposition="outside"))
                     fig_kb.update_layout(**PTBASE,height=200,showlegend=False)
                     fig_kb.update_yaxes(range=[max(0,min(kr2)-.05),1.02],gridcolor=PG)
-                    st.plotly_chart(fig_kb,use_container_width=True)
+                    st.plotly_chart(fig_kb,width="stretch")
 
                     if "Weber-Morris" in kin_res:
                         st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('wm_plot')}</b>",unsafe_allow_html=True)
@@ -1056,7 +1056,7 @@ with tab_kin:
                             annotation_text=f"C={pwm[1]:.3f}")
                         fig_wm.update_layout(**PTBASE,height=230,
                             xaxis_title="√t (min⁰·⁵)",yaxis_title="qt (mg/g)")
-                        st.plotly_chart(fig_wm,use_container_width=True)
+                        st.plotly_chart(fig_wm,width="stretch")
 
                     # ── Kinetics Linear Transform Plots ───────────────────────
                     st.markdown(f"<b style='color:{TXS};font-family:{ff};'>📐 Kinetics Linear Transforms</b>",unsafe_allow_html=True)
@@ -1082,7 +1082,7 @@ with tab_kin:
                                 fig_pfo_lin.update_layout(**PTBASE,height=230,
                                     title=dict(text="PFO Linear: ln(qₑ−qt) vs t",font=dict(size=11,color=TXS)),
                                     xaxis_title="t (min)",yaxis_title="ln(qₑ−qt)",showlegend=True)
-                                st.plotly_chart(fig_pfo_lin,use_container_width=True)
+                                st.plotly_chart(fig_pfo_lin,width="stretch")
                             else:
                                 st.info("PFO linear: insufficient valid points (qe−qt must be >0)")
                         except Exception as _ep: st.info(f"PFO linear: {_ep}")
@@ -1106,7 +1106,7 @@ with tab_kin:
                                 fig_pso_lin.update_layout(**PTBASE,height=230,
                                     title=dict(text="PSO Linear: t/qt vs t",font=dict(size=11,color=TXS)),
                                     xaxis_title="t (min)",yaxis_title="t/qt (min·g/mg)",showlegend=True)
-                                st.plotly_chart(fig_pso_lin,use_container_width=True)
+                                st.plotly_chart(fig_pso_lin,width="stretch")
                         except Exception as _ep2: st.info(f"PSO linear: {_ep2}")
 
                 with kst:
@@ -1191,7 +1191,7 @@ with tab_kin:
                         best_row=df_kpred.iloc[0]
                         qpc1,qpc2=st.columns([2,1])
                         with qpc1:
-                            st.dataframe(df_kpred,use_container_width=True,hide_index=True)
+                            st.dataframe(df_kpred,width="stretch",hide_index=True)
                         with qpc2:
                             st.markdown(f"""<div class="ada-metric" style="border-left:4px solid #22c55e;">
                                 <div class="ada-metric-val" style="color:#16a34a;">{best_row['qt predicted (mg/g)']:.4f}</div>
@@ -1242,7 +1242,7 @@ with tab_kin:
                             name="Exp.",marker=dict(color="#f87171",size=mk_sz+2)))
                         fig_arr.update_layout(**PTBASE,height=260,
                             xaxis_title="1/T (K⁻¹)",yaxis_title="ln k")
-                        st.plotly_chart(fig_arr,use_container_width=True)
+                        st.plotly_chart(fig_arr,width="stretch")
                     with ar_:
                         st.markdown(f"""
                         <div class="interp-box" style="margin-top:.5rem;">
@@ -1313,7 +1313,7 @@ with tab_thermo:
             fig_vth.add_trace(go.Scatter(x=df_th["invT"],y=df_th["lnKc"],mode="markers",
                 name="Exp.",marker=dict(color="#f87171",size=mk_sz+2)))
             fig_vth.update_layout(**PTBASE,height=285,xaxis_title="1/T (K⁻¹)",yaxis_title="ln(Kc)")
-            st.plotly_chart(fig_vth,use_container_width=True)
+            st.plotly_chart(fig_vth,width="stretch")
 
             st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('dg_plot')}</b>",unsafe_allow_html=True)
             bc=[("#34d399" if v<0 else "#f87171") for v in df_th["dG"]]
@@ -1324,7 +1324,7 @@ with tab_thermo:
             fig_dg.add_hline(y=0,line_dash="dash",line_color="rgba(148,163,184,.3)")
             fig_dg.update_layout(**PTBASE,height=230,showlegend=False,
                 xaxis_title="Temperature",yaxis_title="ΔG° (kJ/mol)")
-            st.plotly_chart(fig_dg,use_container_width=True)
+            st.plotly_chart(fig_dg,width="stretch")
 
             # ΔG° trend line
             st.markdown(f"<b style='color:{TXS};font-family:{ff};'>📉 ΔG° Trend</b>",unsafe_allow_html=True)
@@ -1334,7 +1334,7 @@ with tab_thermo:
             fig_dgt.add_hline(y=0,line_dash="dash",line_color="rgba(148,163,184,.3)")
             fig_dgt.update_layout(**PTBASE,height=210,
                 xaxis_title="T (K)",yaxis_title="ΔG° (kJ/mol)",showlegend=False)
-            st.plotly_chart(fig_dgt,use_container_width=True)
+            st.plotly_chart(fig_dgt,width="stretch")
 
         with th2:
             st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('thermo_interp')}</b>",unsafe_allow_html=True)
@@ -1375,7 +1375,7 @@ with tab_thermo:
             st.markdown(f"<br><b style='color:{TXS};font-size:.84rem;font-family:{ff};'>{t('dg_table')}</b>",unsafe_allow_html=True)
             dgd=df_th[["T_C","T_K","Kc","lnKc","dG"]].copy().round(4)
             dgd.columns=["T(°C)","T(K)","Kc","ln Kc","ΔG°(kJ/mol)"]
-            st.dataframe(dgd,use_container_width=True,height=195)
+            st.dataframe(dgd,width="stretch",height=195)
             if (df_th["dG"]<0).all(): st.success(t("spontaneous"))
             else: st.warning(t("non_spontaneous"))
 
@@ -1409,7 +1409,7 @@ with tab_rep:
         </div>""",unsafe_allow_html=True)
 
     st.markdown("<br>",unsafe_allow_html=True)
-    if st.button(t("generate_btn"),use_container_width=True):
+    if st.button(t("generate_btn"),width="stretch"):
         try:
             buf=io.BytesIO()
             with pd.ExcelWriter(buf,engine="openpyxl") as wr:
@@ -1456,7 +1456,7 @@ with tab_rep:
             buf.seek(0)
             safe=exp_nm.replace(" ","_").replace("/","-")[:28]
             st.download_button(t("download_btn"),buf.getvalue(),f"AdsorpLab_{safe}.xlsx",
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",use_container_width=True)
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",width="stretch")
             st.success(t("report_success"))
         except Exception as e: st.error(str(e))
 
