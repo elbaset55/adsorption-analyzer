@@ -740,8 +740,7 @@ with tab_iso:
                     fig_bar.add_trace(go.Bar(x=names_r,y=rmse_vals,
                         marker_color=[PALETTE[i] for i in range(len(names_r))],
                         name="RMSE",text=[f"{v:.3f}" for v in rmse_vals],textposition="outside"),row=1,col=2)
-                    fig_bar.update_layout(**PTBASE,height=230,showlegend=False,
-                        font=dict(color=TXS,family=ff,size=10))
+                    fig_bar.update_layout(**PTBASE,height=230,showlegend=False)
                     fig_bar.update_yaxes(gridcolor=PG)
                     fig_bar.update_annotations(font_color=TXS)
                     st.plotly_chart(fig_bar,use_container_width=True)
@@ -778,6 +777,53 @@ with tab_iso:
                             title=dict(text=t("freundlich_linear"),font=dict(size=11,color=TXS)),
                             xaxis_title="ln Cₑ",yaxis_title="ln qₑ",showlegend=True)
                         st.plotly_chart(fig_fl,use_container_width=True)
+
+                    # D-R & Temkin linear transforms (new row)
+                    lt3,lt4=st.columns(2,gap="small")
+                    with lt3:
+                        # D-R linear: ln(qe) vs ε²  — uses same T & MW as nonlinear fit
+                        try:
+                            R_kJ=8.314e-3
+                            Ce_mol_lt=np.maximum(Ce/(float(mw_dr)*1000.0),1e-15)
+                            eps_lt=R_kJ*T_K_iso*np.log(1.0+1.0/Ce_mol_lt)
+                            eps2_lt=eps_lt**2
+                            lnqe_lt=np.log(np.maximum(qe,1e-15))
+                            sl_dr,ic_dr=np.polyfit(eps2_lt,lnqe_lt,1)
+                            r2_dr_lin=r2s(lnqe_lt,sl_dr*eps2_lt+ic_dr)
+                            beta_lin=-sl_dr if sl_dr<0 else abs(sl_dr)
+                            E_lin=1.0/math.sqrt(2.0*beta_lin) if beta_lin>0 else 0.0
+                            qm_lin=math.exp(ic_dr)
+                            fig_dr_lin=go.Figure()
+                            fig_dr_lin.add_trace(go.Scatter(x=eps2_lt,y=lnqe_lt,mode="markers",
+                                marker=dict(color=PALETTE[3],size=mk_sz)))
+                            xdr=np.linspace(eps2_lt.min(),eps2_lt.max(),100)
+                            fig_dr_lin.add_trace(go.Scatter(x=xdr,y=sl_dr*xdr+ic_dr,mode="lines",
+                                line=dict(color=PALETTE[3],width=2),
+                                name=f"R²={r2_dr_lin:.4f} | E={E_lin:.2f} kJ/mol"))
+                            fig_dr_lin.update_layout(**PTBASE,height=220,
+                                title=dict(text="D-R Linear: ln(qₑ) vs ε²",font=dict(size=11,color=TXS)),
+                                xaxis_title="ε² (kJ²/mol²)",yaxis_title="ln qₑ",showlegend=True)
+                            st.plotly_chart(fig_dr_lin,use_container_width=True)
+                        except Exception as _e_dr:
+                            st.info(f"D-R linear plot: {_e_dr}")
+                    with lt4:
+                        # Temkin linear: qe vs ln(Ce)
+                        try:
+                            lnCe_tm=np.log(np.maximum(Ce,1e-15))
+                            sl_tm,ic_tm=np.polyfit(lnCe_tm,qe,1)
+                            r2_tm_lin=r2s(qe,sl_tm*lnCe_tm+ic_tm)
+                            fig_tm_lin=go.Figure()
+                            fig_tm_lin.add_trace(go.Scatter(x=lnCe_tm,y=qe,mode="markers",
+                                marker=dict(color=PALETTE[2],size=mk_sz)))
+                            xtm=np.linspace(lnCe_tm.min(),lnCe_tm.max(),100)
+                            fig_tm_lin.add_trace(go.Scatter(x=xtm,y=sl_tm*xtm+ic_tm,mode="lines",
+                                line=dict(color=PALETTE[2],width=2),name=f"R²={r2_tm_lin:.4f}"))
+                            fig_tm_lin.update_layout(**PTBASE,height=220,
+                                title=dict(text="Temkin Linear: qₑ vs ln(Cₑ)",font=dict(size=11,color=TXS)),
+                                xaxis_title="ln Cₑ",yaxis_title="qₑ (mg/g)",showlegend=True)
+                            st.plotly_chart(fig_tm_lin,use_container_width=True)
+                        except Exception as _e_tm:
+                            st.info(f"Temkin linear plot: {_e_tm}")
 
                     if show_res:
                         st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('residual_plot')}</b>",unsafe_allow_html=True)
@@ -991,8 +1037,8 @@ with tab_kin:
                     knms=[nm for nm in kin_res]; kr2=[kin_res[nm]["r2"] for nm in knms]
                     fig_kb=go.Figure(go.Bar(x=knms,y=kr2,marker_color=PALETTE[:len(knms)],
                         text=[f"{v:.4f}" for v in kr2],textposition="outside"))
-                    fig_kb.update_layout(**PTBASE,height=200,showlegend=False,
-                        yaxis=dict(range=[max(0,min(kr2)-.05),1.02],gridcolor=PG))
+                    fig_kb.update_layout(**PTBASE,height=200,showlegend=False)
+                    fig_kb.update_yaxes(range=[max(0,min(kr2)-.05),1.02],gridcolor=PG)
                     st.plotly_chart(fig_kb,use_container_width=True)
 
                     if "Weber-Morris" in kin_res:
@@ -1011,6 +1057,57 @@ with tab_kin:
                         fig_wm.update_layout(**PTBASE,height=230,
                             xaxis_title="√t (min⁰·⁵)",yaxis_title="qt (mg/g)")
                         st.plotly_chart(fig_wm,use_container_width=True)
+
+                    # ── Kinetics Linear Transform Plots ───────────────────────
+                    st.markdown(f"<b style='color:{TXS};font-family:{ff};'>📐 Kinetics Linear Transforms</b>",unsafe_allow_html=True)
+                    klt1,klt2=st.columns(2,gap="small")
+                    with klt1:
+                        # PFO linear: ln(qe-qt) vs t → slope=-k1, intercept=ln(qe)
+                        try:
+                            qe_pfo=kin_res["PFO"]["popt"][0] if "PFO" in kin_res else qt.max()
+                            diff=qe_pfo-qt
+                            mask_pfo=diff>0
+                            if mask_pfo.sum()>=3:
+                                lnD=np.log(diff[mask_pfo]); td_pfo=Td[mask_pfo]
+                                sl_p1,ic_p1=np.polyfit(td_pfo,lnD,1)
+                                r2_p1=r2s(lnD,sl_p1*td_pfo+ic_p1)
+                                k1_lin=-sl_p1; qe_lin=math.exp(ic_p1)
+                                fig_pfo_lin=go.Figure()
+                                fig_pfo_lin.add_trace(go.Scatter(x=td_pfo,y=lnD,mode="markers",
+                                    marker=dict(color=PALETTE[0],size=mk_sz)))
+                                xt_p=np.linspace(td_pfo.min(),td_pfo.max(),100)
+                                fig_pfo_lin.add_trace(go.Scatter(x=xt_p,y=sl_p1*xt_p+ic_p1,mode="lines",
+                                    line=dict(color=PALETTE[0],width=2),
+                                    name=f"R²={r2_p1:.4f} | k₁={k1_lin:.4f}"))
+                                fig_pfo_lin.update_layout(**PTBASE,height=230,
+                                    title=dict(text="PFO Linear: ln(qₑ−qt) vs t",font=dict(size=11,color=TXS)),
+                                    xaxis_title="t (min)",yaxis_title="ln(qₑ−qt)",showlegend=True)
+                                st.plotly_chart(fig_pfo_lin,use_container_width=True)
+                            else:
+                                st.info("PFO linear: insufficient valid points (qe−qt must be >0)")
+                        except Exception as _ep: st.info(f"PFO linear: {_ep}")
+                    with klt2:
+                        # PSO linear: t/qt vs t → slope=1/qe, intercept=1/(k2*qe²)
+                        try:
+                            mask_pso=qt>0
+                            if mask_pso.sum()>=3:
+                                tqt=Td[mask_pso]/qt[mask_pso]; td_pso=Td[mask_pso]
+                                sl_p2,ic_p2=np.polyfit(td_pso,tqt,1)
+                                r2_p2=r2s(tqt,sl_p2*td_pso+ic_p2)
+                                qe_p2=1.0/sl_p2 if sl_p2>0 else 0.0
+                                k2_lin=sl_p2**2/ic_p2 if ic_p2>0 else 0.0
+                                fig_pso_lin=go.Figure()
+                                fig_pso_lin.add_trace(go.Scatter(x=td_pso,y=tqt,mode="markers",
+                                    marker=dict(color=PALETTE[1],size=mk_sz)))
+                                xt_p2=np.linspace(td_pso.min(),td_pso.max(),100)
+                                fig_pso_lin.add_trace(go.Scatter(x=xt_p2,y=sl_p2*xt_p2+ic_p2,mode="lines",
+                                    line=dict(color=PALETTE[1],width=2),
+                                    name=f"R²={r2_p2:.4f} | qₑ={qe_p2:.3f}"))
+                                fig_pso_lin.update_layout(**PTBASE,height=230,
+                                    title=dict(text="PSO Linear: t/qt vs t",font=dict(size=11,color=TXS)),
+                                    xaxis_title="t (min)",yaxis_title="t/qt (min·g/mg)",showlegend=True)
+                                st.plotly_chart(fig_pso_lin,use_container_width=True)
+                        except Exception as _ep2: st.info(f"PSO linear: {_ep2}")
 
                 with kst:
                     st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('model_ranking')}</b>",unsafe_allow_html=True)
