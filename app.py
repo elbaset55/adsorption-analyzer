@@ -15,7 +15,7 @@ st.set_page_config(page_title="AdsorpLab Pro", page_icon="🔬",
 # ═══════════════════════════════════════════════════════════════════════════════
 #  SESSION DEFAULTS
 # ═══════════════════════════════════════════════════════════════════════════════
-for k, v in [("lang","en"),("dark",True)]:
+for k, v in [("lang","en"),("dark",False)]:
     if k not in st.session_state: st.session_state[k] = v
 
 DEMO_ISO = pd.DataFrame({'C0':[10,20,40,60,80,100,150,200],
@@ -354,8 +354,15 @@ details summary{{color:{TXS}!important;font-family:{ff}!important;font-size:.83r
 def langmuir(Ce,qm,KL):   return (qm*KL*Ce)/(1+KL*Ce)
 def freundlich(Ce,KF,n):  return KF*(Ce**(1/n))
 def temkin(Ce,AT,B):      return B*np.log(AT*Ce)
-def dr_model(Ce,qm,E):
-    eps=np.log(1+1/Ce); return qm*np.exp(-(eps**2)/(2*E**2))
+def make_dr(T_K, mw_gpmol):
+    """Factory: returns D-R model with fixed T(K) and M(g/mol).
+    ε = RT·ln(1+1/Ce_mol) [kJ/mol], β fitted [mol²/kJ²], E=1/√(2β) [kJ/mol]"""
+    R_kJ = 8.314e-3  # kJ/(mol·K)
+    def _dr(Ce, qm, beta):
+        Ce_mol = np.maximum(Ce / (mw_gpmol * 1000.0), 1e-15)  # mg/L → mol/L
+        eps = R_kJ * T_K * np.log(1.0 + 1.0 / Ce_mol)         # kJ/mol
+        return qm * np.exp(-beta * eps**2)
+    return _dr
 def sips(Ce,qm,Ks,ns):    return (qm*Ks*Ce**ns)/(1+Ks*Ce**ns)
 def bet_model(Ce,Cs,qm_b,C_b):
     x=Ce/Cs; return (C_b*qm_b*x)/((1-x)*(1+(C_b-1)*x+1e-10))
@@ -606,6 +613,17 @@ with tab_iso:
         ["Langmuir","Freundlich","Temkin","D-R","Sips","BET"],
         default=["Langmuir","Freundlich","Temkin","D-R","Sips"],key="isel")
 
+    if "D-R" in iso_sel or "Temkin" in iso_sel:
+        dr1,dr2=st.columns(2)
+        with dr1:
+            T_iso_C=st.number_input("Temperature T (°C) — for D-R & Temkin",value=25.0,format="%.1f",key="t_iso")
+        with dr2:
+            mw_default=float(cal_kw.get("mw",100.0))
+            mw_dr=st.number_input("Molar Mass M (g/mol) — for D-R",value=mw_default,format="%.2f",key="mw_dr")
+        T_K_iso=T_iso_C+273.15
+    else:
+        T_K_iso=298.15; mw_dr=cal_kw.get("mw",100.0)
+
     st.markdown(f"<hr style='border:none;border-top:1px solid {BR};margin:.5rem 0;'>",unsafe_allow_html=True)
     md=st.radio(t("data_input"),[t("upload"),t("manual")],horizontal=True,key="miso")
 
@@ -649,12 +667,14 @@ with tab_iso:
 
             st.markdown("<br>",unsafe_allow_html=True)
 
-            # Fit models
-            funcs={"Langmuir":langmuir,"Freundlich":freundlich,"Temkin":temkin,"D-R":dr_model,"Sips":sips,"BET":bet_model}
+            # Fit models — D-R uses factory with T and MW for correct ε = RT·ln(1+1/Ce_mol)
+            _dr_fn=make_dr(T_K_iso, float(mw_dr))
+            funcs={"Langmuir":langmuir,"Freundlich":freundlich,"Temkin":temkin,"D-R":_dr_fn,"Sips":sips,"BET":bet_model}
+            # D-R: fit (qm, β) where β [mol²/kJ²]; β₀ ≈ 1/(2·E₀²), E₀≈5 kJ/mol → β₀≈0.02
             p0s={"Langmuir":[qe.max(),.1],"Freundlich":[1.,2.],"Temkin":[1.,qe.max()/5],
-                 "D-R":[qe.max(),.5],"Sips":[qe.max(),.1,1.0],"BET":[Ce.max()*2,qe.max(),5.]}
+                 "D-R":[qe.max(),0.02],"Sips":[qe.max(),.1,1.0],"BET":[Ce.max()*2,qe.max(),5.]}
             bds={"Langmuir":(0,np.inf),"Freundlich":(0,np.inf),"Temkin":([1e-10,1e-10],[np.inf,np.inf]),
-                 "D-R":([0,1e-6],[np.inf,np.inf]),"Sips":([0,0,.1],[np.inf,np.inf,5.]),
+                 "D-R":([0,1e-12],[np.inf,np.inf]),"Sips":([0,0,.1],[np.inf,np.inf,5.]),
                  "BET":([Ce.max()*1.01,0,0],[np.inf,np.inf,np.inf])}
 
             iso_res={}
@@ -668,10 +688,15 @@ with tab_iso:
                     elif nm=="Freundlich":
                         pms={"KF":po[0],"1/n":1/po[1],"n":po[1]}
                     elif nm=="Temkin":
-                        pms={"AT (L/g)":po[0],"B (J/mol)":po[1]}
+                        R_J=8.314; bT=R_J*T_K_iso/po[1] if po[1]>0 else float("inf")
+                        pms={"AT (L/g)":po[0],"B (mg/g)":po[1],"bT (J/mol)":bT}
                     elif nm=="D-R":
-                        E_kJ=po[1]; pms={"qₘ (mg/g)":po[0],"E (kJ/mol)":E_kJ,
-                            "Type":"Physical" if E_kJ<8 else "Chemical"}
+                        beta_v=po[1]
+                        E_kJ=1.0/math.sqrt(2.0*beta_v) if beta_v>0 else 0.0
+                        if E_kJ<8:    ads_type="Physisorption"
+                        elif E_kJ<16: ads_type="Ion Exchange"
+                        else:         ads_type="Chemisorption"
+                        pms={"qₘ (mg/g)":po[0],"β (mol²/kJ²)":beta_v,"E (kJ/mol)":E_kJ,"Type":ads_type}
                     elif nm=="Sips":
                         pms={"qₘₐₓ (mg/g)":po[0],"Ks":po[1],"ns":po[2]}
                     else:  # BET
@@ -1038,6 +1063,43 @@ with tab_kin:
                     </div>""",unsafe_allow_html=True)
 
                 st.session_state.update({"kin_results":kin_res,"kin_df":df_k[["Time","Absorbance","Ct","qt"]].round(4),"kin_best":best_kin})
+
+            # ── qt Prediction Calculator ────────────────────────────────────
+            if st.session_state.get("kin_results"):
+                st.markdown(f"<hr style='border:none;border-top:1px solid {BR};margin:1rem 0;'>",unsafe_allow_html=True)
+                with st.expander("🧮 qt Prediction Calculator — predict adsorption capacity at any time",expanded=False):
+                    st.markdown(f'<div class="ada-eq">📐 Enter a contact time → get predicted qt (mg/g) from every fitted kinetic model</div>',unsafe_allow_html=True)
+                    st.markdown("<br>",unsafe_allow_html=True)
+                    t_pred_val=st.number_input("Contact time t (min)",min_value=0.0,value=30.0,format="%.2f",key="kin_t_pred")
+                    kr=st.session_state["kin_results"]
+                    pred_rows=[]
+                    for mnm,mdata in kr.items():
+                        po_k=mdata["popt"]
+                        try:
+                            if mnm=="PFO":
+                                qt_pred=pfo(t_pred_val,*po_k)
+                            elif mnm=="PSO":
+                                qt_pred=pso(t_pred_val,*po_k)
+                            elif mnm=="Elovich":
+                                qt_pred=elovich(t_pred_val,*po_k)
+                            elif mnm=="Weber-Morris":
+                                qt_pred=wm(t_pred_val,*po_k)
+                            else:
+                                continue
+                            pred_rows.append({"Model":mnm,"qt predicted (mg/g)":round(float(qt_pred),4),"R²":round(mdata["r2"],4)})
+                        except Exception:
+                            pass
+                    if pred_rows:
+                        df_kpred=pd.DataFrame(pred_rows).sort_values("R²",ascending=False).reset_index(drop=True)
+                        best_row=df_kpred.iloc[0]
+                        qpc1,qpc2=st.columns([2,1])
+                        with qpc1:
+                            st.dataframe(df_kpred,use_container_width=True,hide_index=True)
+                        with qpc2:
+                            st.markdown(f"""<div class="ada-metric" style="border-left:4px solid #22c55e;">
+                                <div class="ada-metric-val" style="color:#16a34a;">{best_row['qt predicted (mg/g)']:.4f}</div>
+                                <div class="ada-metric-lbl">mg/g @ t={t_pred_val:.1f} min</div>
+                                <div class="ada-metric-sub">Best model: {best_row['Model']}</div></div>""",unsafe_allow_html=True)
 
             # ── Arrhenius Section ──────────────────────────────────────────
             st.markdown(f"<hr style='border:none;border-top:1px solid {BR};margin:1rem 0;'>",unsafe_allow_html=True)
