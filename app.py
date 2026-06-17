@@ -3,229 +3,1311 @@ import pandas as pd
 import numpy as np
 from scipy.optimize import curve_fit
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import io, math
 
-# --- 1. تعريف الموديلات الرياضية ---
-def langmuir_model(Ce, qmax, KL):
-    return (qmax * KL * Ce) / (1 + KL * Ce)
+# ═══════════════════════════════════════════════════════════════════════════════
+#  PAGE CONFIG
+# ═══════════════════════════════════════════════════════════════════════════════
+st.set_page_config(page_title="AdsorpLab Pro", page_icon="🔬",
+                   layout="wide", initial_sidebar_state="expanded")
 
-def freundlich_model(Ce, KF, n):
-    return KF * (Ce ** (1 / n))
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SESSION DEFAULTS
+# ═══════════════════════════════════════════════════════════════════════════════
+for k, v in [("lang","en"),("dark",True)]:
+    if k not in st.session_state: st.session_state[k] = v
 
-def pfo_model(t, qe, k1):
-    return qe * (1 - np.exp(-k1 * t))
+DEMO_ISO = pd.DataFrame({'C0':[10,20,40,60,80,100,150,200],
+                         'Absorbance':[0.12,0.22,0.38,0.50,0.60,0.68,0.78,0.84]})
+DEMO_KIN = pd.DataFrame({'Time':[2,5,10,15,20,30,45,60,90,120],
+                         'Absorbance':[0.70,0.58,0.44,0.35,0.28,0.22,0.17,0.14,0.12,0.11]})
+for k, v in [("iso_data",DEMO_ISO.copy()),("kin_data",DEMO_KIN.copy())]:
+    if k not in st.session_state: st.session_state[k] = v
 
-def pso_model(t, qe, k2):
-    return (k2 * (qe**2) * t) / (1 + k2 * qe * t)
+# ═══════════════════════════════════════════════════════════════════════════════
+#  TRANSLATIONS
+# ═══════════════════════════════════════════════════════════════════════════════
+TRANS = {
+"en":{
+  "app_title":"AdsorpLab Pro","app_subtitle":"Advanced Adsorption & Kinetics Analysis Platform",
+  "app_badge":"✦ World-Class Research Tool","lang_btn":"🌐 العربية",
+  "dark_btn":"☀️ Light","light_btn":"🌙 Dark",
+  "cal_settings":"Calibration Settings","cal_method_label":"Concentration Method",
+  "cal_beer":"Beer-Lambert","cal_curve":"Standard Curve",
+  "epsilon":"ε (L/mol·cm)","path_len":"Path length b (cm)","molar_mass":"Molar mass (g/mol)",
+  "slope":"Slope (m)","intercept":"Intercept",
+  "visualization":"Visualization","show_residuals":"Residual Plots","marker_size":"Marker Size",
+  "quick_actions":"Quick Actions","demo_iso":"🧪 Demo: Isotherms","demo_kin":"⏱ Demo: Kinetics",
+  "tab_home":"🏠 Home","tab_cal":"⚗️ Calibration","tab_iso":"📊 Isotherms",
+  "tab_kin":"⏱️ Kinetics","tab_thermo":"🌡️ Thermodynamics","tab_report":"📄 Report",
+  "home_welcome":"Welcome to AdsorpLab Pro",
+  "home_sub":"The most advanced adsorption analysis tool — built for researchers, designed for excellence.",
+  "home_feat_title":"Platform Capabilities",
+  "feat1_t":"4 Isotherm Models","feat1_d":"Langmuir, Freundlich, Temkin, D-R, Sips, BET",
+  "feat2_t":"4 Kinetic Models","feat2_d":"PFO, PSO, Elovich, Weber-Morris + Arrhenius Ea",
+  "feat3_t":"Thermodynamics","feat3_d":"ΔH°, ΔS°, ΔG° via Van't Hoff equation",
+  "feat4_t":"Statistical Analysis","feat4_d":"R², RMSE, χ², confidence metrics",
+  "feat5_t":"Linear Transforms","feat5_d":"Linearized isotherm plots for validation",
+  "feat6_t":"Excel Reports","feat6_d":"Full multi-sheet scientific report export",
+  "guide_title":"Quick Start Guide",
+  "guide1":"⚗️  Set your calibration method in the sidebar (Beer-Lambert or Standard Curve).",
+  "guide2":"📊  Go to Isotherms — load demo data or enter your own, select models and fit.",
+  "guide3":"⏱️  Go to Kinetics — enter time-absorbance data and identify the best kinetic model.",
+  "guide4":"🌡️  Enter Kc values at different temperatures for full thermodynamic analysis.",
+  "guide5":"📄  Visit Report to download a complete Excel report of all results.",
+  "model_ref":"Model Quick Reference",
+  "session_title":"Session Status",
+  "iso_status":"Isotherms","kin_status":"Kinetics","thermo_status":"Thermodynamics",
+  "not_run":"Not analyzed yet","done":"✅ Analysis complete",
+  "cal_header":"Calibration & Absorbance","cal_desc":"Configure your spectrophotometric calibration method",
+  "live_preview":"🔍 Live Concentration Preview","test_abs":"Test absorbance value",
+  "calc_conc":"Calculated Concentration","cal_curve_vis":"📈 Calibration Curve",
+  "conc_mgl":"Concentration (mg/L)","absorbance":"Absorbance",
+  "iso_header":"Equilibrium Isotherm Analysis",
+  "iso_desc":"Langmuir · Freundlich · Temkin · D-R · Sips · BET",
+  "vol":"Solution Volume V (L)","mass":"Adsorbent Mass m (g)",
+  "models_fit":"Models to fit","data_input":"Data Input Method",
+  "upload":"📁 Upload Excel/CSV","manual":"✏️ Manual Entry",
+  "upload_hint_iso":"File must have columns: **C0** and **Absorbance**",
+  "upload_hint_kin":"File must have columns: **Time** and **Absorbance**",
+  "avg_removal":"Avg Removal","max_qe":"Max qₑ (mg/g)","max_ce":"Max Cₑ (mg/L)",
+  "data_pts":"Data Points","model_ranking":"🏆 Model Ranking","best_fit":"BEST FIT",
+  "parameters":"🔢 Parameters","computed_data":"📋 Computed Data",
+  "iso_curves":"📈 Isotherm Fitting","residual_plot":"📉 Residuals",
+  "linear_plots":"📐 Linear Transform Plots","r2_chart":"📊 Model R² Comparison",
+  "auto_interp":"🤖 Auto Interpretation",
+  "iso_min_pts":"📝 Enter at least 3 data points to begin.",
+  "langmuir_linear":"Langmuir Linear (Cₑ/qₑ vs Cₑ)",
+  "freundlich_linear":"Freundlich Linear (ln qₑ vs ln Cₑ)",
+  "kin_header":"Kinetic Model Analysis",
+  "kin_desc":"PFO · PSO · Elovich · Weber-Morris · Arrhenius Activation Energy",
+  "c0_kin":"Initial Concentration C₀ (mg/L)",
+  "qt_max":"qₜ at t_max","max_time":"Max Time","max_qt":"Max qₜ",
+  "kin_curves":"📈 Kinetic Fitting","wm_plot":"🌀 Weber-Morris Plot",
+  "arrhenius_title":"🔥 Activation Energy (Arrhenius)","arrhenius_desc":"Enter rate constants at different temperatures",
+  "arrhenius_exp":"A = Ae × exp(−Ea/RT) — slope = −Ea/R",
+  "num_arr_temps":"Number of temperatures","arr_temp":"T (°C)","arr_k":"k value",
+  "ea_result":"Activation Energy Eₐ","arr_r2":"Arrhenius R²",
+  "ea_interp_phys":"Physical adsorption (Eₐ < 40 kJ/mol)",
+  "ea_interp_chem":"Chemical adsorption (Eₐ > 40 kJ/mol)",
+  "kin_min_pts":"📝 Enter at least 4 data points to begin.",
+  "thermo_header":"Thermodynamic Analysis","thermo_desc":"Van 't Hoff · ΔG° · ΔH° · ΔS°",
+  "num_temps":"Number of temperature points","temp_pt":"T (°C)","kc_pt":"Kc / Kd",
+  "vth_plot":"📈 Van 't Hoff Plot","dg_plot":"📉 ΔG° vs Temperature",
+  "thermo_interp":"🔬 Thermodynamic Interpretation",
+  "enthalpy":"ΔH° (Enthalpy)","entropy":"ΔS° (Entropy)","dg_at_t1":"ΔG° at T₁","vth_r2":"R²",
+  "exo_title":"🔥 Exothermic","endo_title":"❄️ Endothermic",
+  "exo_body":"Heat is released. Adsorption decreases with temperature.",
+  "endo_body":"Heat is absorbed. Adsorption increases with temperature.",
+  "entropy_pos":"📈 Increased Randomness","entropy_neg":"📉 Decreased Randomness",
+  "entropy_pos_body":"ΔS° > 0 — increased disorder at solid-solution interface.",
+  "entropy_neg_body":"ΔS° < 0 — more ordered interface.",
+  "dg_table":"📋 ΔG° Summary","spontaneous":"✅ Spontaneous at all temperatures",
+  "non_spontaneous":"⚠️ Non-spontaneous at some temperatures",
+  "exo_desc":"Exo (<0) / Endo (>0)","entropy_desc":"Order change","linear_fit":"Fit quality",
+  "duration":"Experiment duration","peak_kin":"Peak kinetic capacity",
+  "valid_meas":"Valid measurements","mean_across":"Mean all points",
+  "peak_ads":"Peak adsorption","max_eq_conc":"Max equilibrium conc.",
+  "report_header":"Report & Export","report_desc":"Generate comprehensive Excel report",
+  "exp_name":"Experiment / Sample ID","researcher":"Researcher Name","notes_label":"Notes",
+  "export_includes":"📦 Export Includes","generate_btn":"📊 Generate Excel Report",
+  "download_btn":"⬇️ Download .xlsx","report_success":"✅ Ready! Click to download.",
+  "session_results":"📊 Session Results","no_results":"No results yet — run analysis first.",
+  "iso_models_lbl":"📊 Isotherm Models","kin_models_lbl":"⏱️ Kinetic Models","thermo_lbl":"🌡️ Thermodynamics",
+  "demo_loaded":"Demo data loaded!","error_cols_iso":"Need columns: C0 and Absorbance",
+  "error_cols_kin":"Need columns: Time and Absorbance",
+  "conc_method":"Concentration Method: ",
+  "interp_best":"Best fitting model is","interp_r2":"with R² =",
+  "interp_lang_fav":"Favorable adsorption (RL between 0-1)",
+  "interp_lang_unfav":"Unfavorable adsorption (RL > 1)",
+  "interp_lang_irrev":"Irreversible adsorption (RL = 0)",
+  "interp_frnd_good":"Favorable heterogeneous adsorption (1/n < 1)",
+  "interp_frnd_poor":"Poor adsorption conditions (1/n > 1)",
+  "data_quality":"📊 Data Quality",
+  "dq_cv":"Coeff. of Variation","dq_range":"qₑ Range","dq_pts":"Valid Points",
+  "dq_mono":"Monotonic","dq_yes":"Yes ✅","dq_no":"No ⚠️",
+},
+"ar":{
+  "app_title":"أدسوربلاب برو","app_subtitle":"منصة تحليل الأدمصاص والحركية المتقدمة",
+  "app_badge":"✦ أداة بحثية عالمية المستوى","lang_btn":"🌐 English",
+  "dark_btn":"☀️ فاتح","light_btn":"🌙 داكن",
+  "cal_settings":"إعدادات المعايرة","cal_method_label":"طريقة حساب التركيز",
+  "cal_beer":"بير-لامبرت","cal_curve":"منحنى معايرة قياسي",
+  "epsilon":"ε (L/mol·cm)","path_len":"طول مسار الضوء b (cm)","molar_mass":"الكتلة المولية (g/mol)",
+  "slope":"الميل (m)","intercept":"الجزء المقطوع",
+  "visualization":"خيارات العرض","show_residuals":"رسم البواقي","marker_size":"حجم النقاط",
+  "quick_actions":"إجراءات سريعة","demo_iso":"🧪 بيانات تجريبية: أيزوثيرم","demo_kin":"⏱ بيانات تجريبية: حركية",
+  "tab_home":"🏠 الرئيسية","tab_cal":"⚗️ المعايرة","tab_iso":"📊 الأيزوثيرم",
+  "tab_kin":"⏱️ الحركية","tab_thermo":"🌡️ الثرموديناميكا","tab_report":"📄 التقرير",
+  "home_welcome":"مرحباً بك في أدسوربلاب برو",
+  "home_sub":"أكثر أداة تحليل أدمصاص احترافية — مصممة للباحثين، بمستوى عالمي.",
+  "home_feat_title":"إمكانيات المنصة",
+  "feat1_t":"6 نماذج أيزوثيرم","feat1_d":"لانجمير، فرندليش، تمكين، D-R، Sips، BET",
+  "feat2_t":"4 نماذج حركية","feat2_d":"PFO، PSO، إيلوفيتش، ويبر-موريس + طاقة التنشيط",
+  "feat3_t":"الثرموديناميكا","feat3_d":"ΔH°، ΔS°، ΔG° عبر معادلة فانت هوف",
+  "feat4_t":"التحليل الإحصائي","feat4_d":"R²، RMSE، χ²، مقاييس الثقة",
+  "feat5_t":"الصور الخطية","feat5_d":"مخططات الأيزوثيرم المحوّلة للتحقق",
+  "feat6_t":"تقارير Excel","feat6_d":"تقرير علمي متعدد الأوراق قابل للتصدير",
+  "guide_title":"دليل البدء السريع",
+  "guide1":"⚗️  اختر طريقة المعايرة في الشريط الجانبي (بير-لامبرت أو منحنى قياسي).",
+  "guide2":"📊  اذهب إلى الأيزوثيرم — حمّل بيانات تجريبية أو أدخل بياناتك، واختر النماذج.",
+  "guide3":"⏱️  اذهب إلى الحركية — أدخل بيانات الزمن والامتصاصية وحدد أفضل نموذج.",
+  "guide4":"🌡️  أدخل قيم Kc عند درجات حرارة مختلفة للتحليل الثرموديناميكي الكامل.",
+  "guide5":"📄  زر التقرير لتنزيل ملف Excel شامل بجميع النتائج.",
+  "model_ref":"مرجع سريع للنماذج",
+  "session_title":"حالة الجلسة",
+  "iso_status":"الأيزوثيرم","kin_status":"الحركية","thermo_status":"الثرموديناميكا",
+  "not_run":"لم يُحلَّل بعد","done":"✅ اكتمل التحليل",
+  "cal_header":"الامتصاصية ومنحنى المعايرة","cal_desc":"اختر طريقة المعايرة الطيفية",
+  "live_preview":"🔍 معاينة التركيز الآني","test_abs":"أدخل قيمة الامتصاصية",
+  "calc_conc":"التركيز المحسوب","cal_curve_vis":"📈 منحنى المعايرة",
+  "conc_mgl":"التركيز (mg/L)","absorbance":"الامتصاصية",
+  "iso_header":"تحليل نماذج الأيزوثيرم",
+  "iso_desc":"لانجمير · فرندليش · تمكين · D-R · Sips · BET",
+  "vol":"حجم المحلول V (L)","mass":"كتلة المادة الماصة m (g)",
+  "models_fit":"النماذج","data_input":"طريقة الإدخال",
+  "upload":"📁 رفع ملف Excel/CSV","manual":"✏️ إدخال يدوي",
+  "upload_hint_iso":"يجب أن يحتوي الملف على عمودي: **C0** و **Absorbance**",
+  "upload_hint_kin":"يجب أن يحتوي الملف على عمودي: **Time** و **Absorbance**",
+  "avg_removal":"متوسط الإزالة","max_qe":"أقصى qₑ","max_ce":"أقصى Cₑ",
+  "data_pts":"عدد النقاط","model_ranking":"🏆 ترتيب النماذج","best_fit":"الأفضل",
+  "parameters":"🔢 المعاملات","computed_data":"📋 البيانات المحسوبة",
+  "iso_curves":"📈 منحنيات الأيزوثيرم","residual_plot":"📉 البواقي",
+  "linear_plots":"📐 مخططات التحويل الخطي","r2_chart":"📊 مقارنة R²",
+  "auto_interp":"🤖 التفسير التلقائي",
+  "iso_min_pts":"📝 أدخل 3 نقاط على الأقل للبدء.",
+  "langmuir_linear":"لانجمير الخطي (Cₑ/qₑ مقابل Cₑ)",
+  "freundlich_linear":"فرندليش الخطي (ln qₑ مقابل ln Cₑ)",
+  "kin_header":"تحليل النماذج الحركية",
+  "kin_desc":"PFO · PSO · إيلوفيتش · ويبر-موريس · طاقة التنشيط أرينيوس",
+  "c0_kin":"التركيز الابتدائي C₀ (mg/L)",
+  "qt_max":"qₜ عند أقصى زمن","max_time":"أقصى زمن","max_qt":"أقصى qₜ",
+  "kin_curves":"📈 منحنيات الحركية","wm_plot":"🌀 مخطط ويبر-موريس",
+  "arrhenius_title":"🔥 طاقة التنشيط (أرينيوس)","arrhenius_desc":"أدخل ثوابت المعدل عند درجات حرارة مختلفة",
+  "arrhenius_exp":"A = Ae × exp(−Ea/RT) — الميل = −Ea/R",
+  "num_arr_temps":"عدد درجات الحرارة","arr_temp":"T (°C)","arr_k":"قيمة k",
+  "ea_result":"طاقة التنشيط Eₐ","arr_r2":"R² أرينيوس",
+  "ea_interp_phys":"أدمصاص فيزيائي (Eₐ < 40 kJ/mol)",
+  "ea_interp_chem":"أدمصاص كيميائي (Eₐ > 40 kJ/mol)",
+  "kin_min_pts":"📝 أدخل 4 نقاط على الأقل للبدء.",
+  "thermo_header":"التحليل الثرموديناميكي","thermo_desc":"فانت هوف · ΔG° · ΔH° · ΔS°",
+  "num_temps":"عدد درجات الحرارة","temp_pt":"T (°C)","kc_pt":"Kc / Kd",
+  "vth_plot":"📈 مخطط فانت هوف","dg_plot":"📉 ΔG° مقابل الحرارة",
+  "thermo_interp":"🔬 التفسير الثرموديناميكي",
+  "enthalpy":"ΔH° (المحتوى الحراري)","entropy":"ΔS° (الإنتروبي)","dg_at_t1":"ΔG° عند T₁","vth_r2":"R²",
+  "exo_title":"🔥 طارد للحرارة","endo_title":"❄️ ماص للحرارة",
+  "exo_body":"تنبعث حرارة. الأدمصاص يتناقص بزيادة الحرارة.",
+  "endo_body":"تمتص حرارة. الأدمصاص يتزايد بزيادة الحرارة.",
+  "entropy_pos":"📈 اضطراب متزايد","entropy_neg":"📉 اضطراب متناقص",
+  "entropy_pos_body":"ΔS° موجب — يزداد الاضطراب عند واجهة الصلب-المحلول.",
+  "entropy_neg_body":"ΔS° سالب — واجهة أكثر انتظاماً.",
+  "dg_table":"📋 ملخص ΔG°","spontaneous":"✅ عفوي عند جميع درجات الحرارة",
+  "non_spontaneous":"⚠️ غير عفوي عند بعض درجات الحرارة",
+  "exo_desc":"طارد (<0) / ماص (>0)","entropy_desc":"تغيّر الاضطراب","linear_fit":"جودة الانحدار",
+  "duration":"مدة التجربة","peak_kin":"أقصى طاقة حركية",
+  "valid_meas":"قياسات صحيحة","mean_across":"متوسط جميع النقاط",
+  "peak_ads":"أقصى طاقة أدمصاص","max_eq_conc":"أقصى تركيز اتزاني",
+  "report_header":"التقرير والتصدير","report_desc":"إنشاء تقرير Excel شامل بجميع النتائج",
+  "exp_name":"اسم التجربة / رمز العينة","researcher":"اسم الباحث","notes_label":"ملاحظات",
+  "export_includes":"📦 محتويات التصدير","generate_btn":"📊 إنشاء تقرير Excel",
+  "download_btn":"⬇️ تحميل .xlsx","report_success":"✅ جاهز! اضغط للتحميل.",
+  "session_results":"📊 نتائج الجلسة","no_results":"لا توجد نتائج — شغّل التحليل أولاً.",
+  "iso_models_lbl":"📊 نماذج الأيزوثيرم","kin_models_lbl":"⏱️ النماذج الحركية","thermo_lbl":"🌡️ الثرموديناميكا",
+  "demo_loaded":"تم تحميل البيانات التجريبية!","error_cols_iso":"يلزم عمودا: C0 و Absorbance",
+  "error_cols_kin":"يلزم عمودا: Time و Absorbance",
+  "conc_method":"طريقة التركيز: ",
+  "interp_best":"أفضل نموذج مناسب هو","interp_r2":"بقيمة R² =",
+  "interp_lang_fav":"أدمصاص مناسب (RL بين 0-1)",
+  "interp_lang_unfav":"أدمصاص غير مناسب (RL > 1)",
+  "interp_lang_irrev":"أدمصاص لا رجعي (RL = 0)",
+  "interp_frnd_good":"أدمصاص غير متجانس مناسب (1/n < 1)",
+  "interp_frnd_poor":"ظروف أدمصاص ضعيفة (1/n > 1)",
+  "data_quality":"📊 جودة البيانات",
+  "dq_cv":"معامل التباين","dq_range":"نطاق qₑ","dq_pts":"نقاط صحيحة",
+  "dq_mono":"رتيب","dq_yes":"نعم ✅","dq_no":"لا ⚠️",
+}}
 
-# --- 2. إعدادات واجهة المستخدم ---
-st.set_page_config(page_title="Comprehensive Adsorption Analyzer", layout="wide")
-st.title("🔬 Comprehensive Adsorption & Kinetics Analyzer Pro")
-st.write("أداة متكاملة لحسابات الاتزان والحركية والثرموديناميكا - تدعم رفع الملفات أو الإدخال اليدوي")
+def t(k): return TRANS[st.session_state.lang].get(k, k)
 
-# تقسيم التطبيق إلى أقسام رئيسية (Tabs)
-tab1, tab2, tab3, tab4 = st.tabs([
-    "📉 1. منحنى المعايرة والامتصاصية", 
-    "📊 2. دراسات الاتزان (Isotherms)", 
-    "⏱️ 3. الحسابات الحركية (Kinetics)", 
-    "🌡️ 4. الثرموديناميكا (Thermodynamics)"
-])
+is_ar   = st.session_state.lang == "ar"
+is_dark = st.session_state.dark
+fd      = "rtl" if is_ar else "ltr"
+ff      = "'Cairo','Inter',sans-serif" if is_ar else "'Inter',sans-serif"
 
-# --- TAB 1: CALIBRATION & ABSORBANCE ---
-with tab1:
-    st.header("📉 حسابات الامتصاصية ومنحنى المعايرة")
-    
-    cal_method = st.radio("اختر طريقة حساب التركيز ($C$):", 
-                          ["استخدام الامتصاصية المولية (Molar Absorptivity - Beer-Lambert)", 
-                           "استخدام منحنى معايرة قياسي (Standard Calibration Curve: Y = mX + C)"])
-    
-    if cal_method == "استخدام الامتصاصية المولية (Molar Absorptivity - Beer-Lambert)":
-        col1, col2 = st.columns(2)
-        with col1:
-            epsilon = st.number_input("الامتصاصية المولية ε (L/mol·cm):", value=15000.0)
-            path_length = st.number_input("طول مسار الضوء b (cm):", value=1.0)
-            mw = st.number_input("الوزن الجزيئي للملوث (g/mol) [للتحويل إلى mg/L]:", value=319.85)
-        with col2:
-            st.info("💡 قانون بير-لامبرت: $A = ε \cdot b \cdot C$\n\nحيث يتم تحويل التركيز تلقائياً من الملارية إلى mg/L باستخدام الوزن الجزيئي.")
-            
-    else:
-        col1, col2 = st.columns(2)
-        with col1:
-            slope = st.number_input("ميل الخط المستقيم (Slope - m):", value=0.1)
-            intercept = st.number_input("الجزء المقطوع (Intercept - C):", value=0.0)
-        with col2:
-            st.info("💡 المعادلة: $Absorbance = (Slope \cdot Concentration) + Intercept$\n\nيتم حساب التركيز: $C = (Abs - Intercept) / Slope$")
+# ═══════════════════════════════════════════════════════════════════════════════
+#  THEME TOKENS
+# ═══════════════════════════════════════════════════════════════════════════════
+if is_dark:
+    BG        = "#070b14"; SURF  = "#0d1628"; CARD  = "rgba(13,22,40,0.9)"
+    CARD2     = "rgba(30,41,59,0.45)"; BR    = "rgba(99,102,241,0.22)"; BRS = "rgba(99,102,241,0.5)"
+    TX        = "#e2e8f0"; TXS   = "#94a3b8"; TXM   = "rgba(148,163,184,0.5)"
+    AC        = "#818cf8"; AC2   = "#c084fc"; ACB   = "rgba(99,102,241,0.1)"
+    AG        = "linear-gradient(135deg,#6366f1,#8b5cf6)"
+    INP       = "rgba(7,11,20,0.85)"; TABB = "rgba(7,11,20,0.7)"; SBG = "linear-gradient(180deg,#0d1628,#070b14)"
+    PP        = "rgba(7,11,20,0)"; PG = "rgba(99,102,241,0.09)"; PT = "rgba(99,102,241,0.25)"
+    SUCBG     = "rgba(8,35,18,0.7)"; SUCBR = "rgba(34,197,94,0.35)"
+    WARNBG    = "rgba(40,18,8,0.7)"; WARNBR = "rgba(251,146,60,0.35)"
+    SCROLLC   = "rgba(99,102,241,0.4)"
+else:
+    BG        = "#eef2ff"; SURF  = "#ffffff"; CARD  = "rgba(255,255,255,0.97)"
+    CARD2     = "rgba(238,242,255,0.8)"; BR    = "rgba(99,102,241,0.16)"; BRS = "rgba(99,102,241,0.45)"
+    TX        = "#1e293b"; TXS   = "#475569"; TXM   = "rgba(71,85,105,0.55)"
+    AC        = "#4f46e5"; AC2   = "#7c3aed"; ACB   = "rgba(99,102,241,0.07)"
+    AG        = "linear-gradient(135deg,#4f46e5,#7c3aed)"
+    INP       = "#ffffff"; TABB = "rgba(238,242,255,0.9)"; SBG = "linear-gradient(180deg,#ffffff,#eef2ff)"
+    PP        = "rgba(238,242,255,0)"; PG = "rgba(99,102,241,0.07)"; PT = "rgba(99,102,241,0.2)"
+    SUCBG     = "rgba(220,252,231,0.9)"; SUCBR = "rgba(22,163,74,0.3)"
+    WARNBG    = "rgba(255,237,213,0.9)"; WARNBR = "rgba(234,88,12,0.3)"
+    SCROLLC   = "rgba(99,102,241,0.3)"
 
-# --- TAB 2: EQUILIBRIUM STUDIES ---
-with tab2:
-    st.header("📊 دراسات الاتزان ونماذج الأيزوثيرم")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        v_l = st.number_input("حجم المحلول V (L):", value=0.05, format="%.3f", key="v_iso")
-    with col2:
-        m_g = st.number_input("كتلة المادة المادّة m (g):", value=0.1, format="%.3f", key="m_iso")
-        
-    # خيار تحديد طريقة إدخال البيانات
-    data_mode_iso = st.radio("اختر طريقة إدخال بيانات الاتزان:", ["رفع ملف Excel/CSV", "كتابة البيانات يدوياً في الجدول"], key="mode_iso")
-    
-    df_iso = None
-    
-    if data_mode_iso == "رفع ملف Excel/CSV":
-        uploaded_iso = st.file_uploader("ارفع ملف الاتزان يحتوي على [C0] و [Absorbance]", type=["xlsx", "csv"], key="iso_file")
-        if uploaded_iso is not None:
-            df_iso = pd.read_excel(uploaded_iso) if uploaded_iso.name.endswith('.xlsx') else pd.read_csv(uploaded_iso)
-            if 'C0' not in df_iso.columns or 'Absorbance' not in df_iso.columns:
-                st.error("⚠️ خطأ: يجب أن يحتوي الملف على عمودين بأسماء 'C0' و 'Absorbance' بالظبط.")
-                df_iso = None
-    else:
-        st.write("📝 اضغط مرتين على أي خانة واكتب الرقم، واضغط على زرار `+` بالأسفل لإضافة سطور جديدة:")
-        # جدول افتراضي فاضي يقدر المستخدم يملأ فيه البيانات
-        init_data_iso = pd.DataFrame([{"C0": 50.0, "Absorbance": 0.5}, {"C0": 100.0, "Absorbance": 0.8}])
-        df_iso = st.data_editor(init_data_iso, num_rows="dynamic", key="editor_iso")
+PALETTE = ["#6366f1","#c084fc","#34d399","#fb923c","#22d3ee","#f472b6","#fbbf24","#a3e635"]
+PTBASE = dict(paper_bgcolor=PP,plot_bgcolor=PP,
+              font=dict(family=ff,color=TXS,size=11),
+              xaxis=dict(gridcolor=PG,linecolor=PT,tickcolor=PT,
+                         title_font=dict(color=TXS,size=12),tickfont=dict(color=TXS)),
+              yaxis=dict(gridcolor=PG,linecolor=PT,tickcolor=PT,
+                         title_font=dict(color=TXS,size=12),tickfont=dict(color=TXS)),
+              legend=dict(bgcolor=CARD,bordercolor=BR,borderwidth=1,font=dict(color=TXS,size=10)),
+              hoverlabel=dict(bgcolor=SURF,bordercolor=BRS,font=dict(color=TX,size=11)),
+              margin=dict(l=50,r=30,t=40,b=50))
 
-    # معالجة وحساب بيانات الاتزان لو متوفرة
-    if df_iso is not None:
-        try:
-            # حساب التركيز عند الاتزان Ce بناء على طريقة الـ Calibration المختارة في تاب 1
-            if "الامتصاصية المولية" in cal_method:
-                df_iso['Ce'] = (df_iso['Absorbance'] / (epsilon * path_length)) * mw * 1000
-            else:
-                df_iso['Ce'] = (df_iso['Absorbance'] - intercept) / slope
-                
-            # حساب qe وكفاءة الإزالة
-            df_iso['qe'] = ((df_iso['C0'] - df_iso['Ce']) * v_l) / m_g
-            df_iso['Removal_Efficiency_%'] = ((df_iso['C0'] - df_iso['Ce']) / df_iso['C0']) * 100
-            
-            st.write("### 📋 البيانات المحسوبة للاتزان:")
-            st.dataframe(df_iso[['C0', 'Absorbance', 'Ce', 'qe', 'Removal_Efficiency_%']])
-            
-            Ce_data = df_iso['Ce'].values
-            qe_data = df_iso['qe'].values
-            
-            # Fitting الموديلات
-            popt_l, _ = curve_fit(langmuir_model, Ce_data, qe_data, p0=[max(qe_data), 1.0], bounds=(0, np.inf))
-            qmax_fit, KL_fit = popt_l
-            r2_l = 1 - (np.sum((qe_data - langmuir_model(Ce_data, *popt_l)) ** 2) / np.sum((qe_data - np.mean(qe_data)) ** 2))
-            
-            popt_f, _ = curve_fit(freundlich_model, Ce_data, qe_data, p0=[1.0, 1.0], bounds=(0, np.inf))
-            KF_fit, n_fit = popt_f
-            r2_f = 1 - (np.sum((qe_data - freundlich_model(Ce_data, *popt_f)) ** 2) / np.sum((qe_data - np.mean(qe_data)) ** 2))
-            
-            st.success(f"🎯 الموديل الأفضل لبياناتك هو: **{'Langmuir (سطح متجانس طبقة واحدة)' if r2_l > r2_f else 'Freundlich (سطح غير متجانس طبقات متعددة)'}**")
-            
-            # رسم المنحنى البياني
-            fig_iso = go.Figure()
-            fig_iso.add_trace(go.Scatter(x=Ce_data, y=qe_data, mode='markers', name='البيانات التجريبية', marker=dict(color='red', size=10)))
-            Ce_line = np.linspace(min(Ce_data)*0.8, max(Ce_data)*1.2, 100)
-            fig_iso.add_trace(go.Scatter(x=Ce_line, y=langmuir_model(Ce_line, qmax_fit, KL_fit), mode='lines', name=f'Langmuir (R²={r2_l:.4f})'))
-            fig_iso.add_trace(go.Scatter(x=Ce_line, y=freundlich_model(Ce_line, KF_fit, n_fit), mode='lines', name=f'Freundlich (R²={r2_f:.4f})', line=dict(dash='dash')))
-            fig_iso.update_layout(xaxis_title="Ce (mg/L)", yaxis_title="qe (mg/g)", template="plotly_white")
-            st.plotly_chart(fig_iso)
-            
-        except Exception as e:
-            st.error(f"خطأ في معالجة الموديلات (تأكد من إدخال الأرقام بشكل صحيح): {e}")
+# ═══════════════════════════════════════════════════════════════════════════════
+#  GLOBAL CSS
+# ═══════════════════════════════════════════════════════════════════════════════
+st.markdown(f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Cairo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+html,body,[class*="css"],.stApp,.main{{font-family:{ff}!important;direction:{fd};}}
+.stApp{{background:{BG};min-height:100vh;}}
+.main .block-container{{padding:1.4rem 1.8rem 3rem;max-width:1450px;}}
+[data-testid="stSidebar"]{{background:{SBG}!important;border-{"left" if is_ar else "right"}:1px solid {BR};}}
+[data-testid="stSidebar"] .block-container{{padding-top:.7rem!important;}}
+[data-baseweb="tab-list"]{{background:{TABB}!important;border-radius:14px!important;padding:4px!important;border:1px solid {BR}!important;gap:2px!important;}}
+[data-baseweb="tab"]{{border-radius:10px!important;color:{TXS}!important;font-weight:500!important;font-size:.81rem!important;padding:.42rem .95rem!important;transition:all .2s!important;font-family:{ff}!important;}}
+[aria-selected="true"][data-baseweb="tab"]{{background:{AG}!important;color:white!important;font-weight:700!important;}}
+[data-testid="stNumberInput"] input,[data-testid="stTextInput"] input,[data-testid="stTextArea"] textarea{{background:{INP}!important;border:1px solid {BR}!important;border-radius:10px!important;color:{TX}!important;font-family:{ff}!important;direction:ltr;}}
+[data-testid="stNumberInput"] input:focus,[data-testid="stTextInput"] input:focus{{border-color:{BRS}!important;box-shadow:0 0 0 3px {ACB}!important;}}
+[data-testid="stSelectbox"]>div>div{{background:{INP}!important;border:1px solid {BR}!important;border-radius:10px!important;color:{TX}!important;}}
+.stButton>button{{background:{AG}!important;color:white!important;border:none!important;border-radius:10px!important;font-weight:600!important;font-size:.83rem!important;transition:all .25s!important;font-family:{ff}!important;}}
+.stButton>button:hover{{transform:translateY(-1px)!important;filter:brightness(1.1)!important;box-shadow:0 8px 22px {ACB}!important;}}
+[data-testid="stDownloadButton"]>button{{background:linear-gradient(135deg,#059669,#10b981)!important;color:white!important;border:none!important;border-radius:10px!important;font-weight:600!important;font-family:{ff}!important;}}
+[data-testid="stDataFrame"]{{border-radius:12px!important;overflow:hidden!important;border:1px solid {BR}!important;}}
+[data-testid="stRadio"] label,[data-testid="stToggle"] label{{color:{TXS}!important;font-size:.83rem!important;font-family:{ff}!important;}}
+[data-testid="stMultiSelect"]>div>div{{background:{INP}!important;border:1px solid {BR}!important;border-radius:10px!important;}}
+[data-baseweb="tag"]{{background:{ACB}!important;border:1px solid {BR}!important;border-radius:6px!important;}}
+details{{background:{CARD}!important;border:1px solid {BR}!important;border-radius:10px!important;}}
+details summary{{color:{TXS}!important;font-family:{ff}!important;font-size:.83rem!important;}}
+[data-testid="stSlider"] label{{color:{TXS}!important;font-size:.82rem!important;font-family:{ff}!important;}}
+[data-testid="stNumberInput"] label,[data-testid="stTextInput"] label,
+[data-testid="stTextArea"] label,[data-testid="stSelectbox"] label,
+[data-testid="stMultiSelect"] label{{color:{TXS}!important;font-size:.81rem!important;font-weight:500!important;font-family:{ff}!important;}}
+::-webkit-scrollbar{{width:4px;height:4px;}}::-webkit-scrollbar-track{{background:transparent;}}
+::-webkit-scrollbar-thumb{{background:{SCROLLC};border-radius:10px;}}
 
-# --- TAB 3: KINETIC STUDIES ---
-with tab3:
-    st.header("⏱️ دراسات الحركية ومعدل الأدمصاص")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        c0_kin = st.number_input("التركيز الابتدائي للحركية C0 (mg/L):", value=50.0)
-    with col2:
-        v_l_kin = st.number_input("حجم المحلول V (L):", value=0.05, format="%.3f", key="v_kin")
-    with col3:
-        m_g_kin = st.number_input("كتلة المادة m (g):", value=0.1, format="%.3f", key="m_kin")
-        
-    data_mode_kin = st.radio("اختر طريقة إدخال بيانات الحركية:", ["رفع ملف Excel/CSV", "كتابة البيانات يدوياً في الجدول"], key="mode_kin")
-    
-    df_kin = None
-    
-    if data_mode_kin == "رفع ملف Excel/CSV":
-        uploaded_kin = st.file_uploader("ارفع ملف الحركية يحتوي على [Time] و [Absorbance]", type=["xlsx", "csv"], key="kin_file")
-        if uploaded_kin is not None:
-            df_kin = pd.read_excel(uploaded_kin) if uploaded_kin.name.endswith('.xlsx') else pd.read_csv(uploaded_kin)
-            if 'Time' not in df_kin.columns or 'Absorbance' not in df_kin.columns:
-                st.error("⚠️ خطأ: يجب أن يحتوي الملف على عمودين بأسماء 'Time' و 'Absorbance' بالظبط.")
-                df_kin = None
-    else:
-        st.write("📝 اضغط مرتين على أي خانة واكتب الرقم، واضغط على زرار `+` بالأسفل لإضافة سطور جديدة:")
-        init_data_kin = pd.DataFrame([{"Time": 5, "Absorbance": 0.6}, {"Time": 10, "Absorbance": 0.4}, {"Time": 30, "Absorbance": 0.2}])
-        df_kin = st.data_editor(init_data_kin, num_rows="dynamic", key="editor_kin")
+/* ── components ── */
+.ada-metric{{background:{CARD};border:1px solid {BR};border-radius:14px;padding:1rem 1.15rem;text-align:center;position:relative;overflow:hidden;}}
+.ada-metric::after{{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:{AG};border-radius:14px 14px 0 0;}}
+.ada-metric-val{{font-size:1.5rem;font-weight:700;color:{AC};font-family:'JetBrains Mono',monospace;line-height:1.1;}}
+.ada-metric-lbl{{font-size:.67rem;font-weight:600;color:{TXM};letter-spacing:.8px;text-transform:uppercase;margin-top:.25rem;font-family:{ff};}}
+.ada-metric-sub{{font-size:.69rem;color:{TXM};margin-top:.12rem;font-family:{ff};}}
+.ada-section{{display:flex;align-items:center;gap:.7rem;margin-bottom:1.1rem;padding-bottom:.7rem;border-bottom:1px solid {BR};direction:{fd};}}
+.ada-icon{{width:36px;height:36px;background:{AG};border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0;}}
+.ada-title{{font-size:1.08rem;font-weight:700;color:{TX};font-family:{ff};}}
+.ada-desc{{font-size:.76rem;color:{TXM};font-family:{ff};}}
+.ada-eq{{background:{ACB};border:1px solid {BR};border-{"right" if is_ar else "left"}:3px solid {AC};border-radius:8px;padding:.8rem 1.05rem;font-size:.79rem;color:{TXS};font-family:{ff};direction:{fd};line-height:1.7;}}
+.ada-card{{background:{CARD};border:1px solid {BR};border-radius:12px;padding:.8rem 1.05rem;margin-bottom:.5rem;direction:{fd};}}
+.ada-card.best{{border-color:{SUCBR};background:{SUCBG};}}
+.ada-card.exo{{border-color:{WARNBR};background:{WARNBG};}}
+.ada-badge{{background:{AG};color:white;font-size:.58rem;font-weight:700;padding:.14rem .48rem;border-radius:20px;letter-spacing:.5px;font-family:{ff};}}
+.param-row{{display:flex;justify-content:space-between;align-items:center;padding:.28rem 0;border-bottom:1px solid {BR};direction:{fd};}}
+.param-key{{color:{TXM};font-size:.78rem;font-family:{ff};}}
+.param-val{{color:{AC};font-family:'JetBrains Mono',monospace;font-size:.79rem;font-weight:600;}}
+.sb-section{{font-size:.61rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:{AC};opacity:.7;padding:.65rem .2rem .28rem;font-family:{ff};direction:{fd};}}
+.ada-hero{{background:{CARD};border:1px solid {BR};border-radius:18px;padding:1.5rem 2rem;margin-bottom:1.3rem;text-align:center;position:relative;overflow:hidden;direction:{fd};}}
+.ada-hero::before{{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:{AG};border-radius:18px 18px 0 0;}}
+.ada-hero-title{{font-size:1.75rem;font-weight:800;background:{AG};-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-family:{ff};margin:0;}}
+.ada-hero-sub{{color:{TXS};font-size:.83rem;margin-top:.3rem;font-family:{ff};}}
+.ada-hero-badge{{display:inline-block;background:{AG};color:white;font-size:.61rem;font-weight:700;padding:.18rem .65rem;border-radius:20px;letter-spacing:.8px;margin-top:.5rem;font-family:{ff};}}
+.feat-card{{background:{CARD};border:1px solid {BR};border-radius:14px;padding:1.1rem 1.2rem;height:100%;transition:all .25s;direction:{fd};}}
+.feat-card:hover{{border-color:{BRS};transform:translateY(-2px);box-shadow:0 8px 24px {ACB};}}
+.feat-icon{{font-size:1.6rem;margin-bottom:.5rem;}}
+.feat-title{{font-size:.88rem;font-weight:700;color:{TX};font-family:{ff};}}
+.feat-desc{{font-size:.75rem;color:{TXM};margin-top:.2rem;font-family:{ff};line-height:1.5;}}
+.guide-step{{display:flex;gap:.7rem;align-items:flex-start;padding:.65rem .9rem;background:{CARD};border:1px solid {BR};border-radius:10px;margin-bottom:.4rem;direction:{fd};}}
+.guide-num{{width:22px;height:22px;background:{AG};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.68rem;font-weight:700;color:white;flex-shrink:0;font-family:{ff};}}
+.guide-text{{font-size:.8rem;color:{TXS};font-family:{ff};line-height:1.55;}}
+.status-chip{{display:inline-flex;align-items:center;gap:.35rem;padding:.28rem .65rem;border-radius:20px;font-size:.72rem;font-weight:600;font-family:{ff};}}
+.status-chip.done{{background:{SUCBG};color:#34d399;border:1px solid {SUCBR};}}
+.status-chip.pending{{background:{ACB};color:{TXM};border:1px solid {BR};}}
+.interp-box{{background:{ACB};border:1px solid {BRS};border-radius:12px;padding:1rem 1.2rem;direction:{fd};}}
+.interp-title{{font-size:.85rem;font-weight:700;color:{AC};font-family:{ff};margin-bottom:.5rem;}}
+.interp-line{{font-size:.79rem;color:{TXS};font-family:{ff};line-height:1.7;padding:.15rem 0;border-bottom:1px solid {BR};}}
+.model-ref-row{{display:flex;justify-content:space-between;padding:.32rem 0;border-bottom:1px solid {BR};direction:{fd};}}
+.ada-footer{{text-align:center;color:{TXM};font-size:.69rem;padding:1.6rem 0 .4rem;border-top:1px solid {BR};margin-top:2rem;font-family:{ff};direction:{fd};}}
+</style>
+""", unsafe_allow_html=True)
 
-    # معالجة الحركية
-    if df_kin is not None:
-        try:
-            if "الامتصاصية المولية" in cal_method:
-                df_kin['Ct'] = (df_kin['Absorbance'] / (epsilon * path_length)) * mw * 1000
-            else:
-                df_kin['Ct'] = (df_kin['Absorbance'] - intercept) / slope
-                
-            df_kin['qt'] = ((c0_kin - df_kin['Ct']) * v_l_kin) / m_g_kin
-            
-            st.write("### 📋 البيانات الحركية المحسوبة:")
-            st.dataframe(df_kin[['Time', 'Absorbance', 'Ct', 'qt']])
-            
-            t_data = df_kin['Time'].values
-            qt_data = df_kin['qt'].values
-            
-            # Fitting PFO & PSO
-            popt_pfo, _ = curve_fit(pfo_model, t_data, qt_data, p0=[max(qt_data), 0.01], bounds=(0, np.inf))
-            r2_pfo = 1 - (np.sum((qt_data - pfo_model(t_data, *popt_pfo)) ** 2) / np.sum((qt_data - np.mean(qt_data)) ** 2))
-            
-            popt_pso, _ = curve_fit(pso_model, t_data, qt_data, p0=[max(qt_data), 0.01], bounds=(0, np.inf))
-            r2_pso = 1 - (np.sum((qt_data - pso_model(t_data, *popt_pso)) ** 2) / np.sum((qt_data - np.mean(qt_data)) ** 2))
-            
-            st.write(f"**Pseudo-first-order (R²):** {r2_pfo:.4f} | **k₁:** {popt_pfo[1]:.4f} min⁻¹")
-            st.write(f"**Pseudo-second-order (R²):** {r2_pso:.4f} | **k₂:** {popt_pso[1]:.4f} g/mg·min")
-            
-            fig_kin = go.Figure()
-            fig_kin.add_trace(go.Scatter(x=t_data, y=qt_data, mode='markers', name='البيانات التجريبية qt'))
-            t_line = np.linspace(0, max(t_data), 100)
-            fig_kin.add_trace(go.Scatter(x=t_line, y=pfo_model(t_line, *popt_pfo), mode='lines', name='PFO Fit'))
-            fig_kin.add_trace(go.Scatter(x=t_line, y=pso_model(t_line, *popt_pso), mode='lines', name='PSO Fit', line=dict(dash='dash')))
-            fig_kin.update_layout(xaxis_title="Time (min)", yaxis_title="qt (mg/g)", template="plotly_white")
-            st.plotly_chart(fig_kin)
-        except Exception as e:
-            st.error(f"خطأ في حسابات الحركية: {e}")
+# ═══════════════════════════════════════════════════════════════════════════════
+#  MATH MODELS
+# ═══════════════════════════════════════════════════════════════════════════════
+def langmuir(Ce,qm,KL):   return (qm*KL*Ce)/(1+KL*Ce)
+def freundlich(Ce,KF,n):  return KF*(Ce**(1/n))
+def temkin(Ce,AT,B):      return B*np.log(AT*Ce)
+def dr_model(Ce,qm,E):
+    eps=np.log(1+1/Ce); return qm*np.exp(-(eps**2)/(2*E**2))
+def sips(Ce,qm,Ks,ns):    return (qm*Ks*Ce**ns)/(1+Ks*Ce**ns)
+def bet_model(Ce,Cs,qm_b,C_b):
+    x=Ce/Cs; return (C_b*qm_b*x)/((1-x)*(1+(C_b-1)*x+1e-10))
+def pfo(t,qe,k1):         return qe*(1-np.exp(-k1*t))
+def pso(t,qe,k2):         return (k2*qe**2*t)/(1+k2*qe*t)
+def elovich(t,a,b):       return (1/b)*np.log(a*b*t+1)
+def wm(t,kid,C):          return kid*np.sqrt(t)+C
 
-# --- TAB 4: THERMODYNAMICS ---
-with tab4:
-    st.header("🌡️ الحسابات الثرموديناميكية (Thermodynamics)")
-    st.write("أدخل قيم ثابت التوزيع ($K_c$ أو $K_d$) عند درجات حرارة مختلفة لحساب ΔG° و ΔH° و ΔS° تلقائياً عبر معادلة فانت هوف (Van 't Hoff).")
-    
-    num_temps = st.number_input("عدد درجات الحرارة المقاسة:", min_value=2, max_value=10, value=3)
-    
-    thermo_data = []
-    cols = st.columns(num_temps)
-    for i, col in enumerate(cols):
-        with col:
-            t_c = st.number_input(f"الحرارة {i+1} (°C):", value=25.0 + i*15)
-            kc = st.number_input(f"ثابت الاتزان $K_c$ عند {t_c}°C:", value=2.0 + i*1.5, format="%.4f")
-            thermo_data.append({"T_C": t_c, "Kc": kc})
-            
-    df_th = pd.DataFrame(thermo_data)
-    df_th['T_K'] = df_th['T_C'] + 273.15
-    df_th['1/T'] = 1 / df_th['T_K']
-    df_th['ln_Kc'] = np.log(df_th['Kc'])
-    
-    R = 8.314 # J/mol·K
-    
+def r2s(y,yp):
+    ss=np.sum((y-yp)**2); st=np.sum((y-np.mean(y))**2)
+    return float(1-ss/st) if st!=0 else 0.0
+def rmse(y,yp): return float(np.sqrt(np.mean((y-yp)**2)))
+def chi2(y,yp): return float(np.sum((y-yp)**2/(np.abs(yp)+1e-10)))
+
+def do_fit(func,x,y,p0,bounds=(0,np.inf)):
     try:
-        slope_th, intercept_th = np.polyfit(df_th['1/T'], df_th['ln_Kc'], 1)
-        delta_H = -slope_th * R / 1000 
-        delta_S = intercept_th * R 
-        df_th['Delta_G_kJ_mol'] = (-R * df_th['T_K'] * df_th['ln_Kc']) / 1000
-        
-        st.subheader("🏆 النتائج الثرموديناميكية:")
-        st.write(f"**المحتوى الحراري ($\Delta H^\circ$):** {delta_H:.3f} kJ/mol")
-        st.write(f"**الإنتروبي ($\Delta S^\circ$):** {delta_S:.3f} J/mol·K")
-        
-        if delta_H < 0:
-            st.warning("🔥 التفاعل **طارد للحرارة (Exothermic)**: الأدمصاص يقل بزيادة الحرارة.")
-        else:
-            st.success("❄️ التفاعل **ماص للحرارة (Endothermic)**: الأدمصاص يزيد بزيادة الحرارة.")
-            
-        st.dataframe(df_th[['T_C', 'Kc', 'Delta_G_kJ_mol']])
-    except Exception as e:
-        st.error(f"يرجى التحقق من المدخلات الثرموديناميكية: {e}")
+        po,_=curve_fit(func,x,y,p0=p0,bounds=bounds,maxfev=15000)
+        yp=func(x,*po); return po,r2s(y,yp),rmse(y,yp),chi2(y,yp)
+    except: return None,0.,999.,999.
+
+def get_c(a,method,**kw):
+    if method=="beer": return (a/(kw['epsilon']*kw['path_length']))*kw['mw']*1000
+    return (a-kw['intercept'])/kw['slope']
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  SIDEBAR
+# ═══════════════════════════════════════════════════════════════════════════════
+with st.sidebar:
+    st.markdown(f"""
+    <div style="text-align:center;padding:.7rem 0 .4rem;">
+        <div style="font-size:1.8rem;margin-bottom:.2rem;">🔬</div>
+        <div style="font-size:1.02rem;font-weight:800;background:{AG};
+            -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+            background-clip:text;font-family:{ff};">{t("app_title")}</div>
+        <div style="font-size:.58rem;color:{TXM};letter-spacing:1px;margin-top:.12rem;font-family:{ff};">
+            SCIENTIFIC ANALYSIS SUITE</div>
+        <span style="background:{AG};color:white;font-size:.56rem;font-weight:700;
+            padding:.13rem .48rem;border-radius:20px;letter-spacing:.5px;font-family:{ff};">v2.0 PRO</span>
+    </div>
+    <hr style="border:none;border-top:1px solid {BR};margin:.6rem 0;">
+    """, unsafe_allow_html=True)
+
+    c1,c2=st.columns(2)
+    with c1:
+        if st.button(t("lang_btn"),use_container_width=True,key="lang_t"):
+            st.session_state.lang="ar" if st.session_state.lang=="en" else "en"; st.rerun()
+    with c2:
+        if st.button(t("dark_btn") if is_dark else t("light_btn"),use_container_width=True,key="thm_t"):
+            st.session_state.dark=not st.session_state.dark; st.rerun()
+
+    st.markdown(f'<div class="sb-section">{t("cal_settings")}</div>',unsafe_allow_html=True)
+    cal_opts=[t("cal_beer"),t("cal_curve")]
+    cal_method=st.selectbox(t("cal_method_label"),cal_opts,label_visibility="collapsed")
+    if cal_method==t("cal_beer"):
+        eps_v=st.number_input(t("epsilon"),value=15000.0,format="%.1f")
+        pl_v=st.number_input(t("path_len"),value=1.00,format="%.2f")
+        mw_v=st.number_input(t("molar_mass"),value=319.85,format="%.2f")
+        cal_kw=dict(epsilon=eps_v,path_length=pl_v,mw=mw_v); cal_key="beer"
+    else:
+        sl_v=st.number_input(t("slope"),value=0.1000,format="%.4f")
+        ic_v=st.number_input(t("intercept"),value=0.0000,format="%.4f")
+        cal_kw=dict(slope=sl_v,intercept=ic_v); cal_key="curve"
+
+    st.markdown(f'<div class="sb-section">{t("visualization")}</div>',unsafe_allow_html=True)
+    show_res=st.toggle(t("show_residuals"),value=False)
+    mk_sz=st.slider(t("marker_size"),5,16,9)
+
+    st.markdown(f'<div class="sb-section">{t("quick_actions")}</div>',unsafe_allow_html=True)
+    if st.button(t("demo_iso"),use_container_width=True):
+        st.session_state.iso_data=DEMO_ISO.copy(); st.toast(t("demo_loaded"),icon="🧪")
+    if st.button(t("demo_kin"),use_container_width=True):
+        st.session_state.kin_data=DEMO_KIN.copy(); st.toast(t("demo_loaded"),icon="⏱")
+
+    st.markdown(f"""
+    <hr style="border:none;border-top:1px solid {BR};margin:.8rem 0;">
+    <div style="font-size:.61rem;color:{TXM};text-align:center;line-height:1.9;font-family:{ff};">
+        Langmuir · Freundlich · Temkin · D-R · Sips · BET<br>
+        PFO · PSO · Elovich · Weber-Morris · Arrhenius
+    </div>""",unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  HERO
+# ═══════════════════════════════════════════════════════════════════════════════
+st.markdown(f"""
+<div class="ada-hero">
+    <p class="ada-hero-title">🔬 {t("app_title")}</p>
+    <p class="ada-hero-sub">{t("app_subtitle")}</p>
+    <span class="ada-hero-badge">{t("app_badge")}</span>
+</div>""",unsafe_allow_html=True)
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  TABS
+# ═══════════════════════════════════════════════════════════════════════════════
+tab_home,tab_cal,tab_iso,tab_kin,tab_thermo,tab_rep = st.tabs([
+    t("tab_home"),t("tab_cal"),t("tab_iso"),t("tab_kin"),t("tab_thermo"),t("tab_report")])
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  HOME
+# ─────────────────────────────────────────────────────────────────────────────
+with tab_home:
+    st.markdown(f"""
+    <div class="ada-section"><div class="ada-icon">🏠</div>
+    <div><div class="ada-title">{t("home_welcome")}</div>
+    <div class="ada-desc">{t("home_sub")}</div></div></div>""",unsafe_allow_html=True)
+
+    # Feature cards
+    st.markdown(f"<div style='font-size:.95rem;font-weight:700;color:{TX};font-family:{ff};margin-bottom:.8rem;'>{t('home_feat_title')}</div>",unsafe_allow_html=True)
+    feats=[
+        ("🧪",t("feat1_t"),t("feat1_d")),("⏱️",t("feat2_t"),t("feat2_d")),
+        ("🌡️",t("feat3_t"),t("feat3_d")),("📊",t("feat4_t"),t("feat4_d")),
+        ("📐",t("feat5_t"),t("feat5_d")),("📄",t("feat6_t"),t("feat6_d")),
+    ]
+    cols=st.columns(3,gap="medium")
+    for i,(ic,ti,de) in enumerate(feats):
+        with cols[i%3]:
+            st.markdown(f"""
+            <div class="feat-card">
+                <div class="feat-icon">{ic}</div>
+                <div class="feat-title">{ti}</div>
+                <div class="feat-desc">{de}</div>
+            </div><br>""",unsafe_allow_html=True)
+
+    st.markdown("<br>",unsafe_allow_html=True)
+    lft,rgt=st.columns([3,2],gap="large")
+
+    with lft:
+        st.markdown(f"<div style='font-size:.95rem;font-weight:700;color:{TX};font-family:{ff};margin-bottom:.7rem;'>{t('guide_title')}</div>",unsafe_allow_html=True)
+        for i,step in enumerate([t(f"guide{j}") for j in range(1,6)],1):
+            st.markdown(f"""
+            <div class="guide-step">
+                <div class="guide-num">{i}</div>
+                <div class="guide-text">{step}</div>
+            </div>""",unsafe_allow_html=True)
+
+        st.markdown(f"<br><div style='font-size:.95rem;font-weight:700;color:{TX};font-family:{ff};margin-bottom:.7rem;'>{t('model_ref')}</div>",unsafe_allow_html=True)
+        st.markdown(f"""
+        <div class="ada-card">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem;">
+                <div>
+                    <div style="color:{AC};font-size:.73rem;font-weight:700;margin-bottom:.3rem;font-family:{ff};">Isotherm Models</div>
+                    {"".join([f'<div class="model-ref-row"><span style="color:{TXS};font-size:.76rem;font-family:{ff};">{n}</span><span style="color:{TXM};font-size:.7rem;font-family:{ff};">{d}</span></div>'
+                     for n,d in [("Langmuir","Homogeneous, monolayer"),("Freundlich","Heterogeneous, multilayer"),
+                                  ("Temkin","Heat effect, linear"),("D-R","Adsorption energy"),
+                                  ("Sips","Combined L+F"),("BET","Multilayer, porous")]])}
+                </div>
+                <div>
+                    <div style="color:{AC};font-size:.73rem;font-weight:700;margin-bottom:.3rem;font-family:{ff};">Kinetic Models</div>
+                    {"".join([f'<div class="model-ref-row"><span style="color:{TXS};font-size:.76rem;font-family:{ff};">{n}</span><span style="color:{TXM};font-size:.7rem;font-family:{ff};">{d}</span></div>'
+                     for n,d in [("PFO","Physical diffusion"),("PSO","Chemical interaction"),
+                                  ("Elovich","Chemisorption"),("Weber-Morris","Intraparticle"),
+                                  ("Arrhenius","Activation energy")]])}
+                </div>
+            </div>
+        </div>""",unsafe_allow_html=True)
+
+    with rgt:
+        st.markdown(f"<div style='font-size:.95rem;font-weight:700;color:{TX};font-family:{ff};margin-bottom:.7rem;'>{t('session_title')}</div>",unsafe_allow_html=True)
+        for key,lbl in [("iso_results",t("iso_status")),("kin_results",t("kin_status")),("thermo_results",t("thermo_status"))]:
+            done=key in st.session_state
+            cls="done" if done else "pending"
+            txt=t("done") if done else t("not_run")
+            st.markdown(f"""
+            <div class="ada-card" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem;">
+                <span style="color:{TX};font-size:.83rem;font-weight:600;font-family:{ff};">{lbl}</span>
+                <span class="status-chip {cls}">{txt}</span>
+            </div>""",unsafe_allow_html=True)
+
+        # Mini summary if results exist
+        if "iso_results" in st.session_state:
+            best=st.session_state.get("iso_best","")
+            res=st.session_state["iso_results"].get(best,{})
+            r2v=res.get("r2",0)
+            st.markdown(f"""
+            <div class="interp-box" style="margin-top:.8rem;">
+                <div class="interp-title">📊 Best Isotherm</div>
+                <div class="interp-line">🥇 {best} — R² = {r2v:.4f}</div>
+            </div>""",unsafe_allow_html=True)
+
+        if "kin_results" in st.session_state:
+            bestk=st.session_state.get("kin_best","")
+            resk=st.session_state["kin_results"].get(bestk,{})
+            r2k=resk.get("r2",0)
+            st.markdown(f"""
+            <div class="interp-box" style="margin-top:.6rem;">
+                <div class="interp-title">⏱️ Best Kinetic</div>
+                <div class="interp-line">🥇 {bestk} — R² = {r2k:.4f}</div>
+            </div>""",unsafe_allow_html=True)
+
+        if "thermo_results" in st.session_state:
+            tr=st.session_state["thermo_results"]
+            st.markdown(f"""
+            <div class="interp-box" style="margin-top:.6rem;">
+                <div class="interp-title">🌡️ Thermodynamics</div>
+                <div class="interp-line">ΔH° = {tr['delta_H']:.3f} kJ/mol</div>
+                <div class="interp-line">ΔS° = {tr['delta_S']:.3f} J/mol·K</div>
+            </div>""",unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  CALIBRATION
+# ─────────────────────────────────────────────────────────────────────────────
+with tab_cal:
+    st.markdown(f"""
+    <div class="ada-section"><div class="ada-icon">⚗️</div>
+    <div><div class="ada-title">{t("cal_header")}</div>
+    <div class="ada-desc">{t("cal_desc")}</div></div></div>""",unsafe_allow_html=True)
+
+    lc,rc=st.columns(2,gap="large")
+    with lc:
+        st.markdown(f'<div class="ada-eq">📐 {t("cal_beer") if cal_key=="beer" else t("cal_curve")}<br>{"A = ε · b · C → C(mg/L) = C(mol/L) × M × 1000" if cal_key=="beer" else "C = (A − intercept) / slope"}</div>',unsafe_allow_html=True)
+        st.markdown(f"<br><b style='color:{TXS};font-size:.88rem;font-family:{ff};'>{t('live_preview')}</b>",unsafe_allow_html=True)
+        ta=st.number_input(t("test_abs"),value=0.500,format="%.3f",step=.001)
+        cv=get_c(np.array([ta]),cal_key,**cal_kw)[0]
+        st.markdown(f"""
+        <div class="ada-card" style="margin-top:.55rem;">
+            <div style="color:{TXM};font-size:.68rem;letter-spacing:.8px;text-transform:uppercase;font-family:{ff};">{t("calc_conc")}</div>
+            <div style="font-size:1.9rem;font-weight:700;color:{AC};font-family:'JetBrains Mono',monospace;margin-top:.18rem;">
+                {cv:.4f} <span style="font-size:.85rem;color:{TXM};">mg/L</span>
+            </div>
+            <div style="font-size:.7rem;color:{TXM};margin-top:.12rem;font-family:{ff};">A = {ta:.3f}</div>
+        </div>""",unsafe_allow_html=True)
+
+    with rc:
+        st.markdown(f"<b style='color:{TXS};font-size:.88rem;font-family:{ff};'>{t('cal_curve_vis')}</b>",unsafe_allow_html=True)
+        ar=np.linspace(.01,1.6,300)
+        cr=get_c(ar,cal_key,**cal_kw)
+        fg=go.Figure(); fg.add_trace(go.Scatter(x=cr,y=ar,mode='lines',
+            line=dict(color=AC,width=2.5),fill='tozeroy',fillcolor=ACB))
+        fg.update_layout(**PTBASE,height=270,xaxis_title=t("conc_mgl"),yaxis_title=t("absorbance"),showlegend=False)
+        st.plotly_chart(fg,use_container_width=True)
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  ISOTHERMS
+# ─────────────────────────────────────────────────────────────────────────────
+with tab_iso:
+    st.markdown(f"""
+    <div class="ada-section"><div class="ada-icon">📊</div>
+    <div><div class="ada-title">{t("iso_header")}</div>
+    <div class="ada-desc">{t("iso_desc")}</div></div></div>""",unsafe_allow_html=True)
+
+    ic1,ic2,ic3=st.columns(3)
+    with ic1: v_l=st.number_input(t("vol"),value=.050,format="%.3f",key="vl")
+    with ic2: m_g=st.number_input(t("mass"),value=.100,format="%.3f",key="mg")
+    with ic3: iso_sel=st.multiselect(t("models_fit"),
+        ["Langmuir","Freundlich","Temkin","D-R","Sips","BET"],
+        default=["Langmuir","Freundlich","Temkin","D-R","Sips"],key="isel")
+
+    st.markdown(f"<hr style='border:none;border-top:1px solid {BR};margin:.5rem 0;'>",unsafe_allow_html=True)
+    md=st.radio(t("data_input"),[t("upload"),t("manual")],horizontal=True,key="miso")
+
+    if md==t("upload"):
+        uf=st.file_uploader(t("upload_hint_iso"),type=["xlsx","csv"],key="iuf")
+        if uf:
+            try:
+                dr=pd.read_excel(uf) if uf.name.endswith(".xlsx") else pd.read_csv(uf)
+                if "C0" in dr.columns and "Absorbance" in dr.columns:
+                    st.session_state.iso_data=dr[["C0","Absorbance"]].copy()
+                else: st.error(t("error_cols_iso"))
+            except Exception as e: st.error(str(e))
+    else:
+        st.session_state.iso_data=st.data_editor(st.session_state.iso_data,num_rows="dynamic",
+            use_container_width=True,key="ied",
+            column_config={"C0":st.column_config.NumberColumn("C₀ (mg/L)",format="%.3f"),
+                           "Absorbance":st.column_config.NumberColumn("Absorbance",format="%.4f")})
+
+    df_i=st.session_state.iso_data.copy()
+    if df_i is not None and len(df_i)>=3:
+        try:
+            df_i["Ce"]=get_c(df_i["Absorbance"].values,cal_key,**cal_kw)
+            df_i["qe"]=((df_i["C0"]-df_i["Ce"])*v_l)/m_g
+            df_i["Rem%"]=((df_i["C0"]-df_i["Ce"])/df_i["C0"])*100
+            df_i=df_i[df_i["Ce"]>0].reset_index(drop=True)
+            Ce,qe=df_i["Ce"].values,df_i["qe"].values
+
+            # Data quality
+            cv_val=float(np.std(qe)/np.mean(qe)*100) if np.mean(qe)!=0 else 0
+            mono=bool(np.all(np.diff(qe)>=0) or np.all(np.diff(qe)<=0))
+
+            k1_,k2_,k3_,k4_=st.columns(4)
+            for col,(val,lbl,sub) in zip([k1_,k2_,k3_,k4_],[
+                (f"{df_i['Rem%'].mean():.1f}%",t("avg_removal"),t("mean_across")),
+                (f"{qe.max():.2f}",t("max_qe"),t("peak_ads")),
+                (f"{Ce.max():.2f}",t("max_ce"),t("max_eq_conc")),
+                (f"{len(df_i)}",t("data_pts"),t("valid_meas"))]):
+                with col:
+                    st.markdown(f"""<div class="ada-metric"><div class="ada-metric-val">{val}</div>
+                        <div class="ada-metric-lbl">{lbl}</div><div class="ada-metric-sub">{sub}</div></div>""",unsafe_allow_html=True)
+
+            st.markdown("<br>",unsafe_allow_html=True)
+
+            # Fit models
+            funcs={"Langmuir":langmuir,"Freundlich":freundlich,"Temkin":temkin,"D-R":dr_model,"Sips":sips,"BET":bet_model}
+            p0s={"Langmuir":[qe.max(),.1],"Freundlich":[1.,2.],"Temkin":[1.,qe.max()/5],
+                 "D-R":[qe.max(),.5],"Sips":[qe.max(),.1,1.0],"BET":[Ce.max()*2,qe.max(),5.]}
+            bds={"Langmuir":(0,np.inf),"Freundlich":(0,np.inf),"Temkin":([0,0],[np.inf,np.inf]),
+                 "D-R":([0,1e-6],[np.inf,np.inf]),"Sips":([0,0,.1],[np.inf,np.inf,5.]),
+                 "BET":([Ce.max()*1.01,0,0],[np.inf,np.inf,np.inf])}
+
+            iso_res={}
+            for nm in iso_sel:
+                if nm in("Temkin","D-R","Sips") and Ce.min()<=0: continue
+                po,rv,rm,rc=do_fit(funcs[nm],Ce,qe,p0s[nm],bds[nm])
+                if po is not None:
+                    if nm=="Langmuir":
+                        RL=1/(1+po[1]*Ce.max())
+                        pms={"qₘₐₓ (mg/g)":po[0],"KL (L/mg)":po[1],"RL":RL}
+                    elif nm=="Freundlich":
+                        pms={"KF":po[0],"1/n":1/po[1],"n":po[1]}
+                    elif nm=="Temkin":
+                        pms={"AT (L/g)":po[0],"B (J/mol)":po[1]}
+                    elif nm=="D-R":
+                        E_kJ=po[1]/math.sqrt(2); pms={"qₘ (mg/g)":po[0],"E (kJ/mol)":E_kJ,
+                            "Type":"Physical" if E_kJ<8 else "Chemical"}
+                    elif nm=="Sips":
+                        pms={"qₘₐₓ (mg/g)":po[0],"Ks":po[1],"ns":po[2]}
+                    else:  # BET
+                        pms={"Cs (mg/L)":po[0],"qₘ (mg/g)":po[1],"C_BET":po[2]}
+                    iso_res[nm]={"popt":po,"r2":rv,"rmse":rm,"chi2":rc,"params":pms}
+
+            if iso_res:
+                best_iso=max(iso_res,key=lambda k:iso_res[k]["r2"])
+
+                ch_col,st_col=st.columns([3,2],gap="large")
+
+                with ch_col:
+                    # Main isotherm plot
+                    st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('iso_curves')}</b>",unsafe_allow_html=True)
+                    fig_i=go.Figure()
+                    fig_i.add_trace(go.Scatter(x=Ce,y=qe,mode="markers",name="Exp.",
+                        marker=dict(color="#f87171",size=mk_sz,symbol="circle",
+                                    line=dict(color="rgba(248,113,113,0.3)",width=1))))
+                    CeL=np.linspace(Ce.min()*.4,Ce.max()*1.25,400)
+                    for i,(nm,res) in enumerate(iso_res.items()):
+                        try:
+                            yL=funcs[nm](CeL,*res["popt"])
+                            yL=np.where(np.isfinite(yL),yL,np.nan)
+                            is_b=(nm==best_iso)
+                            fig_i.add_trace(go.Scatter(x=CeL,y=yL,mode="lines",
+                                name=f"{nm} R²={res['r2']:.4f}"+(" ★" if is_b else ""),
+                                line=dict(color=PALETTE[i],width=3 if is_b else 1.8,
+                                          dash="solid" if is_b else "dot")))
+                        except: pass
+                    fig_i.update_layout(**PTBASE,height=360,
+                        xaxis_title="Cₑ (mg/L)",yaxis_title="qₑ (mg/g)")
+                    st.plotly_chart(fig_i,use_container_width=True)
+
+                    # R² comparison bar chart
+                    st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('r2_chart')}</b>",unsafe_allow_html=True)
+                    names_r=[nm for nm in iso_res]; r2_vals=[iso_res[nm]["r2"] for nm in names_r]
+                    rmse_vals=[iso_res[nm]["rmse"] for nm in names_r]
+                    fig_bar=make_subplots(rows=1,cols=2,subplot_titles=["R²","RMSE"])
+                    fig_bar.add_trace(go.Bar(x=names_r,y=r2_vals,marker_color=PALETTE[:len(names_r)],
+                        name="R²",text=[f"{v:.4f}" for v in r2_vals],textposition="outside"),row=1,col=1)
+                    fig_bar.add_trace(go.Bar(x=names_r,y=rmse_vals,
+                        marker_color=[PALETTE[i] for i in range(len(names_r))],
+                        name="RMSE",text=[f"{v:.3f}" for v in rmse_vals],textposition="outside"),row=1,col=2)
+                    fig_bar.update_layout(**PTBASE,height=230,showlegend=False,
+                        font=dict(color=TXS,family=ff,size=10))
+                    fig_bar.update_yaxes(gridcolor=PG)
+                    fig_bar.update_annotations(font_color=TXS)
+                    st.plotly_chart(fig_bar,use_container_width=True)
+
+                    # Linear transform plots
+                    st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('linear_plots')}</b>",unsafe_allow_html=True)
+                    lt1,lt2=st.columns(2,gap="small")
+                    with lt1:
+                        # Langmuir linear: Ce/qe vs Ce
+                        Ce_qe=Ce/qe; sl_l,ic_l=np.polyfit(Ce,Ce_qe,1)
+                        r2_l_lin=r2s(Ce_qe,sl_l*Ce+ic_l)
+                        fig_ll=go.Figure()
+                        fig_ll.add_trace(go.Scatter(x=Ce,y=Ce_qe,mode="markers",
+                            marker=dict(color=PALETTE[0],size=mk_sz)))
+                        xln=np.linspace(Ce.min()*.8,Ce.max()*1.1,100)
+                        fig_ll.add_trace(go.Scatter(x=xln,y=sl_l*xln+ic_l,mode="lines",
+                            line=dict(color=PALETTE[0],width=2),name=f"R²={r2_l_lin:.4f}"))
+                        fig_ll.update_layout(**PTBASE,height=220,
+                            title=dict(text=t("langmuir_linear"),font=dict(size=11,color=TXS)),
+                            xaxis_title="Cₑ (mg/L)",yaxis_title="Cₑ/qₑ",showlegend=True)
+                        st.plotly_chart(fig_ll,use_container_width=True)
+                    with lt2:
+                        # Freundlich linear: ln(qe) vs ln(Ce)
+                        mask=Ce>0; lnCe=np.log(Ce[mask]); lnqe=np.log(qe[mask])
+                        sl_f,ic_f=np.polyfit(lnCe,lnqe,1)
+                        r2_f_lin=r2s(lnqe,sl_f*lnCe+ic_f)
+                        fig_fl=go.Figure()
+                        fig_fl.add_trace(go.Scatter(x=lnCe,y=lnqe,mode="markers",
+                            marker=dict(color=PALETTE[1],size=mk_sz)))
+                        xln2=np.linspace(lnCe.min()*.9,lnCe.max()*1.05,100)
+                        fig_fl.add_trace(go.Scatter(x=xln2,y=sl_f*xln2+ic_f,mode="lines",
+                            line=dict(color=PALETTE[1],width=2),name=f"R²={r2_f_lin:.4f}"))
+                        fig_fl.update_layout(**PTBASE,height=220,
+                            title=dict(text=t("freundlich_linear"),font=dict(size=11,color=TXS)),
+                            xaxis_title="ln Cₑ",yaxis_title="ln qₑ",showlegend=True)
+                        st.plotly_chart(fig_fl,use_container_width=True)
+
+                    if show_res:
+                        st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('residual_plot')}</b>",unsafe_allow_html=True)
+                        fig_r=go.Figure()
+                        for i,(nm,res) in enumerate(iso_res.items()):
+                            try:
+                                yp=funcs[nm](Ce,*res["popt"])
+                                fig_r.add_trace(go.Scatter(x=Ce,y=qe-yp,mode="markers+lines",
+                                    name=nm,marker=dict(color=PALETTE[i],size=8),
+                                    line=dict(color=PALETTE[i],width=1,dash="dot")))
+                            except: pass
+                        fig_r.add_hline(y=0,line_dash="dash",line_color="rgba(148,163,184,0.3)")
+                        fig_r.update_layout(**PTBASE,height=200,
+                            xaxis_title="Cₑ",yaxis_title="Residuals")
+                        st.plotly_chart(fig_r,use_container_width=True)
+
+                    st.markdown(f"<b style='color:{TXS};font-size:.86rem;font-family:{ff};'>{t('computed_data')}</b>",unsafe_allow_html=True)
+                    dd=df_i[["C0","Absorbance","Ce","qe","Rem%"]].copy().round(4)
+                    dd.columns=["C₀","Abs","Cₑ (mg/L)","qₑ (mg/g)","Rem%"]
+                    st.dataframe(dd,use_container_width=True,height=190)
+
+                with st_col:
+                    st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('model_ranking')}</b>",unsafe_allow_html=True)
+                    icons=["🥇","🥈","🥉","🔹","🔸","▪️"]
+                    srt=sorted(iso_res.items(),key=lambda x:-x[1]["r2"])
+                    for rk,(nm,res) in enumerate(srt):
+                        ib=(rk==0); ic=icons[min(rk,5)]
+                        st.markdown(f"""
+                        <div class="ada-card {'best' if ib else ''}">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem;">
+                                <span style="font-weight:700;color:{TX};font-size:.87rem;font-family:{ff};">{ic} {nm}</span>
+                                {"<span class='ada-badge'>"+t("best_fit")+"</span>" if ib else ""}
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.25rem;">
+                                <div><div style="color:{TXM};font-size:.58rem;">R²</div>
+                                    <div style="color:{'#34d399' if ib else AC};font-family:'JetBrains Mono',monospace;font-size:.81rem;font-weight:700;">{res['r2']:.4f}</div></div>
+                                <div><div style="color:{TXM};font-size:.58rem;">RMSE</div>
+                                    <div style="color:{TXS};font-family:'JetBrains Mono',monospace;font-size:.81rem;">{res['rmse']:.4f}</div></div>
+                                <div><div style="color:{TXM};font-size:.58rem;">χ²</div>
+                                    <div style="color:{TXS};font-family:'JetBrains Mono',monospace;font-size:.81rem;">{res['chi2']:.4f}</div></div>
+                            </div>
+                        </div>""",unsafe_allow_html=True)
+
+                    # Data quality
+                    st.markdown(f"<br><b style='color:{TXS};font-family:{ff};'>{t('data_quality')}</b>",unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div class="ada-card">
+                        <div class="param-row"><span class="param-key">{t("dq_cv")}</span><span class="param-val">{cv_val:.1f}%</span></div>
+                        <div class="param-row"><span class="param-key">{t("dq_range")}</span><span class="param-val">{qe.min():.2f}–{qe.max():.2f}</span></div>
+                        <div class="param-row"><span class="param-key">{t("dq_pts")}</span><span class="param-val">{len(df_i)}</span></div>
+                        <div class="param-row"><span class="param-key">{t("dq_mono")}</span><span class="param-val">{"✅" if mono else "⚠️"}</span></div>
+                    </div>""",unsafe_allow_html=True)
+
+                    # Parameters
+                    st.markdown(f"<br><b style='color:{TXS};font-family:{ff};'>{t('parameters')}</b>",unsafe_allow_html=True)
+                    for nm,res in srt:
+                        with st.expander(nm,expanded=(nm==best_iso)):
+                            for pk,pv in res["params"].items():
+                                vs=f"{pv:.4f}" if isinstance(pv,float) else str(pv)
+                                st.markdown(f'<div class="param-row"><span class="param-key">{pk}</span><span class="param-val">{vs}</span></div>',unsafe_allow_html=True)
+
+                    # Auto interpretation
+                    st.markdown(f"<br><b style='color:{TXS};font-family:{ff};'>{t('auto_interp')}</b>",unsafe_allow_html=True)
+                    interp_lines=[]
+                    interp_lines.append(f"• {t('interp_best')} <b>{best_iso}</b> {t('interp_r2')} {iso_res[best_iso]['r2']:.4f}")
+                    if "Langmuir" in iso_res:
+                        RL_v=iso_res["Langmuir"]["params"].get("RL",0.5)
+                        if isinstance(RL_v,float):
+                            interp_lines.append(f"• {t('interp_lang_fav') if 0<RL_v<1 else t('interp_lang_unfav')} (RL={RL_v:.3f})")
+                    if "Freundlich" in iso_res:
+                        inv_n=iso_res["Freundlich"]["params"].get("1/n",1.)
+                        if isinstance(inv_n,float):
+                            interp_lines.append(f"• {t('interp_frnd_good') if inv_n<1 else t('interp_frnd_poor')} (1/n={inv_n:.3f})")
+                    if "D-R" in iso_res:
+                        Ev=iso_res["D-R"]["params"].get("E (kJ/mol)",0)
+                        if isinstance(Ev,float):
+                            interp_lines.append(f"• D-R: E = {Ev:.2f} kJ/mol → {'Physical' if Ev<8 else 'Chemical'} adsorption")
+                    if "Sips" in iso_res:
+                        ns_v=iso_res["Sips"]["params"].get("ns",1.)
+                        if isinstance(ns_v,float):
+                            interp_lines.append(f"• Sips ns = {ns_v:.3f} ({'≈Langmuir' if abs(ns_v-1)<.15 else 'Heterogeneous'})")
+                    st.markdown(f"""
+                    <div class="interp-box">
+                        {"".join([f'<div class="interp-line">{l}</div>' for l in interp_lines])}
+                    </div>""",unsafe_allow_html=True)
+
+                st.session_state.update({"iso_results":iso_res,"iso_df":dd,"iso_best":best_iso})
+        except Exception as e: st.error(f"Error: {e}")
+    else: st.info(t("iso_min_pts"))
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  KINETICS
+# ─────────────────────────────────────────────────────────────────────────────
+with tab_kin:
+    st.markdown(f"""
+    <div class="ada-section"><div class="ada-icon">⏱️</div>
+    <div><div class="ada-title">{t("kin_header")}</div>
+    <div class="ada-desc">{t("kin_desc")}</div></div></div>""",unsafe_allow_html=True)
+
+    kc1,kc2,kc3=st.columns(3)
+    with kc1: c0k=st.number_input(t("c0_kin"),value=50.0)
+    with kc2: vk=st.number_input(t("vol"),value=.050,format="%.3f",key="vk")
+    with kc3: mk=st.number_input(t("mass"),value=.100,format="%.3f",key="mk")
+    kin_sel=st.multiselect(t("models_fit"),["PFO","PSO","Elovich","Weber-Morris"],
+        default=["PFO","PSO","Elovich","Weber-Morris"],key="ksel")
+
+    st.markdown(f"<hr style='border:none;border-top:1px solid {BR};margin:.5rem 0;'>",unsafe_allow_html=True)
+    mkd=st.radio(t("data_input"),[t("upload"),t("manual")],horizontal=True,key="mkin")
+
+    if mkd==t("upload"):
+        uf2=st.file_uploader(t("upload_hint_kin"),type=["xlsx","csv"],key="kuf")
+        if uf2:
+            try:
+                dr2=pd.read_excel(uf2) if uf2.name.endswith(".xlsx") else pd.read_csv(uf2)
+                if "Time" in dr2.columns and "Absorbance" in dr2.columns:
+                    st.session_state.kin_data=dr2[["Time","Absorbance"]].copy()
+                else: st.error(t("error_cols_kin"))
+            except Exception as e: st.error(str(e))
+    else:
+        st.session_state.kin_data=st.data_editor(st.session_state.kin_data,num_rows="dynamic",
+            use_container_width=True,key="ked",
+            column_config={"Time":st.column_config.NumberColumn("Time (min)",format="%.1f"),
+                           "Absorbance":st.column_config.NumberColumn("Absorbance",format="%.4f")})
+
+    df_k=st.session_state.kin_data.copy()
+    if df_k is not None and len(df_k)>=4:
+        try:
+            df_k["Ct"]=get_c(df_k["Absorbance"].values,cal_key,**cal_kw)
+            df_k["qt"]=((c0k-df_k["Ct"])*vk)/mk
+            df_k=df_k[df_k["qt"]>=0].reset_index(drop=True)
+            Td,qt=df_k["Time"].values,df_k["qt"].values
+
+            kp1,kp2,kp3,kp4=st.columns(4)
+            for col,(val,lbl,sub) in zip([kp1,kp2,kp3,kp4],[
+                (f"{qt[-1]:.3f}",t("qt_max"),t("duration")),
+                (f"{Td[-1]:.0f} min",t("max_time"),t("duration")),
+                (f"{qt.max():.3f}",t("max_qt"),t("peak_kin")),
+                (f"{len(df_k)}",t("data_pts"),t("valid_meas"))]):
+                with col:
+                    st.markdown(f"""<div class="ada-metric"><div class="ada-metric-val">{val}</div>
+                        <div class="ada-metric-lbl">{lbl}</div><div class="ada-metric-sub">{sub}</div></div>""",unsafe_allow_html=True)
+
+            st.markdown("<br>",unsafe_allow_html=True)
+
+            kfuncs={"PFO":pfo,"PSO":pso,"Elovich":elovich,"Weber-Morris":wm}
+            kp0s={"PFO":[qt.max(),.05],"PSO":[qt.max(),.01],
+                  "Elovich":[1.,.5],"Weber-Morris":[qt.max()/np.sqrt(Td.max()+1e-6),.1]}
+            kbds={"PFO":(0,np.inf),"PSO":(0,np.inf),
+                  "Elovich":([1e-6,1e-6],[np.inf,np.inf]),"Weber-Morris":(-np.inf,np.inf)}
+            kpms={"PFO": lambda p:{"qₑ (mg/g)":p[0],"k₁ (min⁻¹)":p[1]},
+                  "PSO": lambda p:{"qₑ (mg/g)":p[0],"k₂ (g/mg·min)":p[1]},
+                  "Elovich":lambda p:{"α (mg/g·min)":p[0],"β (g/mg)":p[1]},
+                  "Weber-Morris":lambda p:{"k_id":p[0],"C (mg/g)":p[1]}}
+
+            kin_res={}
+            for nm in kin_sel:
+                po,rv,rm,rc=do_fit(kfuncs[nm],Td,qt,kp0s[nm],kbds[nm])
+                if po is not None:
+                    kin_res[nm]={"popt":po,"r2":rv,"rmse":rm,"chi2":rc,"params":kpms[nm](po)}
+
+            if kin_res:
+                best_kin=max(kin_res,key=lambda k:kin_res[k]["r2"])
+                kch,kst=st.columns([3,2],gap="large")
+
+                with kch:
+                    st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('kin_curves')}</b>",unsafe_allow_html=True)
+                    fig_k=go.Figure()
+                    fig_k.add_trace(go.Scatter(x=Td,y=qt,mode="markers",name="Exp.",
+                        marker=dict(color="#f87171",size=mk_sz,symbol="diamond",
+                                    line=dict(color="rgba(248,113,113,0.3)",width=1))))
+                    tL=np.linspace(.01,Td.max()*1.1,300)
+                    for i,(nm,res) in enumerate(kin_res.items()):
+                        yL=kfuncs[nm](tL,*res["popt"]); ib=(nm==best_kin)
+                        fig_k.add_trace(go.Scatter(x=tL,y=yL,mode="lines",
+                            name=f"{nm} R²={res['r2']:.4f}"+(" ★" if ib else ""),
+                            line=dict(color=PALETTE[i],width=3 if ib else 1.8,dash="solid" if ib else "dot")))
+                    fig_k.update_layout(**PTBASE,height=340,xaxis_title="Time (min)",yaxis_title="qt (mg/g)")
+                    st.plotly_chart(fig_k,use_container_width=True)
+
+                    # R² bar
+                    st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('r2_chart')}</b>",unsafe_allow_html=True)
+                    knms=[nm for nm in kin_res]; kr2=[kin_res[nm]["r2"] for nm in knms]
+                    fig_kb=go.Figure(go.Bar(x=knms,y=kr2,marker_color=PALETTE[:len(knms)],
+                        text=[f"{v:.4f}" for v in kr2],textposition="outside"))
+                    fig_kb.update_layout(**PTBASE,height=200,showlegend=False,
+                        yaxis=dict(range=[max(0,min(kr2)-.05),1.02],gridcolor=PG))
+                    st.plotly_chart(fig_kb,use_container_width=True)
+
+                    if "Weber-Morris" in kin_res:
+                        st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('wm_plot')}</b>",unsafe_allow_html=True)
+                        sT=np.sqrt(Td); fig_wm=go.Figure()
+                        fig_wm.add_trace(go.Scatter(x=sT,y=qt,mode="markers",
+                            marker=dict(color="#fb923c",size=mk_sz)))
+                        pwm=kin_res["Weber-Morris"]["popt"]
+                        xwm=np.linspace(0,sT.max()*1.1,200)
+                        fig_wm.add_trace(go.Scatter(x=xwm,y=wm(xwm,*pwm),mode="lines",
+                            name=f"R²={kin_res['Weber-Morris']['r2']:.4f}",
+                            line=dict(color="#fb923c",width=2)))
+                        fig_wm.add_hline(y=pwm[1],line_dash="dash",
+                            line_color="rgba(251,146,60,.35)",
+                            annotation_text=f"C={pwm[1]:.3f}")
+                        fig_wm.update_layout(**PTBASE,height=230,
+                            xaxis_title="√t (min⁰·⁵)",yaxis_title="qt (mg/g)")
+                        st.plotly_chart(fig_wm,use_container_width=True)
+
+                with kst:
+                    st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('model_ranking')}</b>",unsafe_allow_html=True)
+                    icons=["🥇","🥈","🥉","🔹"]
+                    for rk,(nm,res) in enumerate(sorted(kin_res.items(),key=lambda x:-x[1]["r2"])):
+                        ib=(rk==0); ic=icons[min(rk,3)]
+                        st.markdown(f"""
+                        <div class="ada-card {'best' if ib else ''}">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem;">
+                                <span style="font-weight:700;color:{TX};font-size:.87rem;font-family:{ff};">{ic} {nm}</span>
+                                {"<span class='ada-badge'>"+t("best_fit")+"</span>" if ib else ""}
+                            </div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.25rem;">
+                                <div><div style="color:{TXM};font-size:.58rem;">R²</div>
+                                    <div style="color:{'#34d399' if ib else AC};font-family:'JetBrains Mono',monospace;font-size:.81rem;font-weight:700;">{res['r2']:.4f}</div></div>
+                                <div><div style="color:{TXM};font-size:.58rem;">RMSE</div>
+                                    <div style="color:{TXS};font-family:'JetBrains Mono',monospace;font-size:.81rem;">{res['rmse']:.4f}</div></div>
+                                <div><div style="color:{TXM};font-size:.58rem;">χ²</div>
+                                    <div style="color:{TXS};font-family:'JetBrains Mono',monospace;font-size:.81rem;">{res['chi2']:.4f}</div></div>
+                            </div>
+                        </div>""",unsafe_allow_html=True)
+
+                    st.markdown(f"<br><b style='color:{TXS};font-family:{ff};'>{t('parameters')}</b>",unsafe_allow_html=True)
+                    for nm,res in sorted(kin_res.items(),key=lambda x:-x[1]["r2"]):
+                        with st.expander(nm,expanded=(nm==best_kin)):
+                            for pk,pv in res["params"].items():
+                                st.markdown(f'<div class="param-row"><span class="param-key">{pk}</span><span class="param-val">{pv:.4f}</span></div>',unsafe_allow_html=True)
+
+                    # Auto interp
+                    st.markdown(f"<br><b style='color:{TXS};font-family:{ff};'>{t('auto_interp')}</b>",unsafe_allow_html=True)
+                    klines=[f"• {t('interp_best')} <b>{best_kin}</b> {t('interp_r2')} {kin_res[best_kin]['r2']:.4f}"]
+                    if "PSO" in kin_res and kin_res["PSO"]["r2"]>kin_res.get("PFO",{"r2":0})["r2"]:
+                        klines.append("• PSO > PFO → chemical interaction dominant")
+                    else:
+                        klines.append("• PFO ≥ PSO → physical diffusion dominant")
+                    if "Weber-Morris" in kin_res:
+                        C_wm=kin_res["Weber-Morris"]["params"].get("C (mg/g)",0)
+                        klines.append(f"• WM C = {C_wm:.3f} → {'film diffusion' if C_wm>0.1 else 'intraparticle diffusion'}")
+                    st.markdown(f"""
+                    <div class="interp-box">
+                        {"".join([f'<div class="interp-line">{l}</div>' for l in klines])}
+                    </div>""",unsafe_allow_html=True)
+
+                st.session_state.update({"kin_results":kin_res,"kin_df":df_k[["Time","Absorbance","Ct","qt"]].round(4),"kin_best":best_kin})
+
+            # ── Arrhenius Section ──────────────────────────────────────────
+            st.markdown(f"<hr style='border:none;border-top:1px solid {BR};margin:1rem 0;'>",unsafe_allow_html=True)
+            with st.expander(f"🔥 {t('arrhenius_title')} — {t('arrhenius_desc')}",expanded=False):
+                st.markdown(f'<div class="ada-eq">📐 {t("arrhenius_exp")}</div>',unsafe_allow_html=True)
+                st.markdown("<br>",unsafe_allow_html=True)
+                na=st.number_input(t("num_arr_temps"),min_value=2,max_value=6,value=3,key="narr")
+                arr_data=[]
+                acols=st.columns(int(na))
+                dT=[25,35,45,55,65,75]; dk=[0.05,0.12,0.28,0.55,0.95,1.60]
+                for i,col in enumerate(acols):
+                    with col:
+                        aT=st.number_input(t("arr_temp"),value=float(dT[i]),key=f"at{i}")
+                        ak=st.number_input(t("arr_k"),value=float(dk[i]),format="%.4f",key=f"ak{i}")
+                        arr_data.append({"T_C":aT,"k":ak})
+                df_arr=pd.DataFrame(arr_data)
+                df_arr["T_K"]=df_arr["T_C"]+273.15
+                df_arr["invT"]=1/df_arr["T_K"]
+                df_arr["lnk"]=np.log(df_arr["k"])
+                R=8.314
+                try:
+                    sl_a,ic_a=np.polyfit(df_arr["invT"],df_arr["lnk"],1)
+                    Ea=-sl_a*R/1000
+                    r2_arr=r2s(df_arr["lnk"].values,(sl_a*df_arr["invT"]+ic_a).values)
+
+                    ac1,ac2,ac3=st.columns(3)
+                    for col,(val,lbl) in zip([ac1,ac2,ac3],[
+                        (f"{Ea:.2f} kJ/mol",t("ea_result")),
+                        (f"{r2_arr:.4f}",t("arr_r2")),
+                        ("Physical" if Ea<40 else "Chemical","Type")]):
+                        with col:
+                            st.markdown(f"""<div class="ada-metric"><div class="ada-metric-val" style="font-size:1.3rem;">{val}</div>
+                                <div class="ada-metric-lbl">{lbl}</div></div>""",unsafe_allow_html=True)
+
+                    st.markdown("<br>",unsafe_allow_html=True)
+                    al,ar_=st.columns(2,gap="large")
+                    with al:
+                        invL=np.linspace(df_arr["invT"].min()*.99,df_arr["invT"].max()*1.01,200)
+                        fig_arr=go.Figure()
+                        fig_arr.add_trace(go.Scatter(x=invL,y=sl_a*invL+ic_a,mode="lines",
+                            name=f"Arrhenius Fit (R²={r2_arr:.4f})",line=dict(color=AC,width=2.5)))
+                        fig_arr.add_trace(go.Scatter(x=df_arr["invT"],y=df_arr["lnk"],mode="markers",
+                            name="Exp.",marker=dict(color="#f87171",size=mk_sz+2)))
+                        fig_arr.update_layout(**PTBASE,height=260,
+                            xaxis_title="1/T (K⁻¹)",yaxis_title="ln k")
+                        st.plotly_chart(fig_arr,use_container_width=True)
+                    with ar_:
+                        st.markdown(f"""
+                        <div class="interp-box" style="margin-top:.5rem;">
+                            <div class="interp-title">🔥 Activation Energy Analysis</div>
+                            <div class="interp-line">• Eₐ = {Ea:.2f} kJ/mol</div>
+                            <div class="interp-line">• {"<b>"+t("ea_interp_phys")+"</b>" if Ea<40 else "<b>"+t("ea_interp_chem")+"</b>"}</div>
+                            <div class="interp-line">• Arrhenius R² = {r2_arr:.4f}</div>
+                            <div class="interp-line">• Pre-exponential A = {math.exp(ic_a):.4f}</div>
+                        </div>""",unsafe_allow_html=True)
+                except Exception as e: st.error(str(e))
+
+        except Exception as e: st.error(f"Error: {e}")
+    else: st.info(t("kin_min_pts"))
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  THERMODYNAMICS
+# ─────────────────────────────────────────────────────────────────────────────
+with tab_thermo:
+    st.markdown(f"""
+    <div class="ada-section"><div class="ada-icon">🌡️</div>
+    <div><div class="ada-title">{t("thermo_header")}</div>
+    <div class="ada-desc">{t("thermo_desc")}</div></div></div>""",unsafe_allow_html=True)
+
+    st.markdown(f'<div class="ada-eq">📐 Van\'t Hoff: ln(Kc) = −ΔH°/RT + ΔS°/R &nbsp;|&nbsp; ΔG° = −RT·ln(Kc)</div>',unsafe_allow_html=True)
+    st.markdown("<br>",unsafe_allow_html=True)
+
+    nt=st.number_input(t("num_temps"),min_value=2,max_value=8,value=3)
+    dTT=[25,35,45,55,65,75,85,95]; dKK=[2.,3.2,4.8,6.5,8.2,10.,12.5,15.]
+    thd=[]
+    tcols=st.columns(int(nt))
+    for i,col in enumerate(tcols):
+        with col:
+            tc=st.number_input(t("temp_pt"),value=float(dTT[i]),key=f"tc{i}")
+            kc=st.number_input(t("kc_pt"),value=float(dKK[i]),format="%.4f",key=f"kc{i}")
+            thd.append({"T_C":tc,"Kc":kc})
+
+    df_th=pd.DataFrame(thd)
+    df_th["T_K"]=df_th["T_C"]+273.15
+    df_th["invT"]=1/df_th["T_K"]
+    df_th["lnKc"]=np.log(df_th["Kc"])
+    R=8.314
+    try:
+        slt,ict=np.polyfit(df_th["invT"],df_th["lnKc"],1)
+        dH=-slt*R/1000; dS=ict*R
+        df_th["dG"]=(-R*df_th["T_K"]*df_th["lnKc"])/1000
+        r2_th=r2s(df_th["lnKc"].values,(slt*df_th["invT"]+ict).values)
+
+        tm1,tm2,tm3,tm4=st.columns(4)
+        for col,(val,lbl,sub) in zip([tm1,tm2,tm3,tm4],[
+            (f"{dH:.3f} kJ/mol",t("enthalpy"),t("exo_desc")),
+            (f"{dS:.3f} J/mol·K",t("entropy"),t("entropy_desc")),
+            (f"{df_th['dG'].iloc[0]:.3f} kJ/mol",t("dg_at_t1"),"kJ/mol"),
+            (f"{r2_th:.4f}",t("vth_r2"),t("linear_fit"))]):
+            with col:
+                st.markdown(f"""<div class="ada-metric" style="margin-top:.5rem;">
+                    <div class="ada-metric-val" style="font-size:1.2rem;">{val}</div>
+                    <div class="ada-metric-lbl">{lbl}</div><div class="ada-metric-sub">{sub}</div></div>""",unsafe_allow_html=True)
+
+        st.markdown("<br>",unsafe_allow_html=True)
+        th1,th2=st.columns([3,2],gap="large")
+
+        with th1:
+            st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('vth_plot')}</b>",unsafe_allow_html=True)
+            invL=np.linspace(df_th["invT"].min()*.99,df_th["invT"].max()*1.01,200)
+            fig_vth=go.Figure()
+            fig_vth.add_trace(go.Scatter(x=invL,y=slt*invL+ict,mode="lines",
+                name=f"Van't Hoff (R²={r2_th:.4f})",line=dict(color=AC,width=2.5)))
+            fig_vth.add_trace(go.Scatter(x=df_th["invT"],y=df_th["lnKc"],mode="markers",
+                name="Exp.",marker=dict(color="#f87171",size=mk_sz+2)))
+            fig_vth.update_layout(**PTBASE,height=285,xaxis_title="1/T (K⁻¹)",yaxis_title="ln(Kc)")
+            st.plotly_chart(fig_vth,use_container_width=True)
+
+            st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('dg_plot')}</b>",unsafe_allow_html=True)
+            bc=[("#34d399" if v<0 else "#f87171") for v in df_th["dG"]]
+            fig_dg=go.Figure(go.Bar(
+                x=[f"{r['T_C']:.0f}°C" for _,r in df_th.iterrows()],
+                y=df_th["dG"],marker=dict(color=bc,line=dict(width=0)),
+                text=[f"{v:.2f}" for v in df_th["dG"]],textposition="outside"))
+            fig_dg.add_hline(y=0,line_dash="dash",line_color="rgba(148,163,184,.3)")
+            fig_dg.update_layout(**PTBASE,height=230,showlegend=False,
+                xaxis_title="Temperature",yaxis_title="ΔG° (kJ/mol)")
+            st.plotly_chart(fig_dg,use_container_width=True)
+
+            # ΔG° trend line
+            st.markdown(f"<b style='color:{TXS};font-family:{ff};'>📉 ΔG° Trend</b>",unsafe_allow_html=True)
+            fig_dgt=go.Figure()
+            fig_dgt.add_trace(go.Scatter(x=df_th["T_K"],y=df_th["dG"],mode="lines+markers",
+                line=dict(color=AC,width=2.5),marker=dict(color=AC,size=mk_sz),name="ΔG°"))
+            fig_dgt.add_hline(y=0,line_dash="dash",line_color="rgba(148,163,184,.3)")
+            fig_dgt.update_layout(**PTBASE,height=210,
+                xaxis_title="T (K)",yaxis_title="ΔG° (kJ/mol)",showlegend=False)
+            st.plotly_chart(fig_dgt,use_container_width=True)
+
+        with th2:
+            st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('thermo_interp')}</b>",unsafe_allow_html=True)
+            if dH<0:
+                st.markdown(f"""<div class="ada-card exo">
+                    <div style="font-size:.88rem;font-weight:700;color:#fb923c;">{t("exo_title")}</div>
+                    <div style="color:{TXS};font-size:.77rem;margin-top:.3rem;line-height:1.6;">
+                        ΔH° = {dH:.3f} kJ/mol<br>{t("exo_body")}</div></div>""",unsafe_allow_html=True)
+            else:
+                st.markdown(f"""<div class="ada-card" style="border-color:{BRS};">
+                    <div style="font-size:.88rem;font-weight:700;color:{AC};">{t("endo_title")}</div>
+                    <div style="color:{TXS};font-size:.77rem;margin-top:.3rem;line-height:1.6;">
+                        ΔH° = {dH:.3f} kJ/mol<br>{t("endo_body")}</div></div>""",unsafe_allow_html=True)
+
+            if dS>0:
+                st.markdown(f"""<div class="ada-card">
+                    <div style="font-size:.88rem;font-weight:700;color:#34d399;">{t("entropy_pos")}</div>
+                    <div style="color:{TXS};font-size:.77rem;margin-top:.3rem;">ΔS° = {dS:.3f} J/mol·K<br>{t("entropy_pos_body")}</div></div>""",unsafe_allow_html=True)
+            else:
+                st.markdown(f"""<div class="ada-card">
+                    <div style="font-size:.88rem;font-weight:700;color:{TXM};">{t("entropy_neg")}</div>
+                    <div style="color:{TXS};font-size:.77rem;margin-top:.3rem;">ΔS° = {dS:.3f} J/mol·K<br>{t("entropy_neg_body")}</div></div>""",unsafe_allow_html=True)
+
+            # auto interp
+            st.markdown(f"<br><b style='color:{TXS};font-family:{ff};'>{t('auto_interp')}</b>",unsafe_allow_html=True)
+            tlines=[
+                f"• {'Exothermic' if dH<0 else 'Endothermic'}: ΔH° = {dH:.3f} kJ/mol",
+                f"• {'Increased' if dS>0 else 'Decreased'} entropy: ΔS° = {dS:.3f} J/mol·K",
+                f"• ΔG° at T₁ = {df_th['dG'].iloc[0]:.3f} kJ/mol ({'spontaneous' if df_th['dG'].iloc[0]<0 else 'non-spontaneous'})",
+                f"• Van't Hoff R² = {r2_th:.4f}",
+            ]
+            if abs(dH)<20: tlines.append("• |ΔH°| < 20 kJ/mol → Physisorption")
+            elif abs(dH)<40: tlines.append("• 20–40 kJ/mol → Mixed physisorption/chemisorption")
+            else: tlines.append("• |ΔH°| > 40 kJ/mol → Chemisorption")
+            st.markdown(f"""<div class="interp-box">
+                {"".join([f'<div class="interp-line">{l}</div>' for l in tlines])}</div>""",unsafe_allow_html=True)
+
+            st.markdown(f"<br><b style='color:{TXS};font-size:.84rem;font-family:{ff};'>{t('dg_table')}</b>",unsafe_allow_html=True)
+            dgd=df_th[["T_C","T_K","Kc","lnKc","dG"]].copy().round(4)
+            dgd.columns=["T(°C)","T(K)","Kc","ln Kc","ΔG°(kJ/mol)"]
+            st.dataframe(dgd,use_container_width=True,height=195)
+            if (df_th["dG"]<0).all(): st.success(t("spontaneous"))
+            else: st.warning(t("non_spontaneous"))
+
+        st.session_state["thermo_results"]={"delta_H":dH,"delta_S":dS,"r2":r2_th,"df":dgd}
+    except Exception as e: st.error(str(e))
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  REPORT
+# ─────────────────────────────────────────────────────────────────────────────
+with tab_rep:
+    st.markdown(f"""
+    <div class="ada-section"><div class="ada-icon">📄</div>
+    <div><div class="ada-title">{t("report_header")}</div>
+    <div class="ada-desc">{t("report_desc")}</div></div></div>""",unsafe_allow_html=True)
+
+    rp1,rp2=st.columns([2,1])
+    with rp1:
+        exp_nm=st.text_input(t("exp_name"),value="Adsorption Study - Sample 01")
+        rsr=st.text_input(t("researcher"),value="")
+        nts=st.text_area(t("notes_label"),value="",height=72)
+    with rp2:
+        st.markdown(f"""
+        <div class="ada-card" style="margin-top:.3rem;line-height:2.1;">
+            <div style="font-weight:700;color:{AC};font-size:.83rem;margin-bottom:.45rem;">{t("export_includes")}</div>
+            <div style="color:{TXS};font-size:.76rem;">
+                ✅ Raw experimental data<br>✅ Cₑ, qₑ, qt computed values<br>
+                ✅ All isotherm parameters (6 models)<br>✅ All kinetic parameters (4 models)<br>
+                ✅ Thermodynamic parameters<br>✅ R², RMSE, χ² statistics<br>
+                ✅ Model comparison & ranking<br>✅ Auto-interpretation notes
+            </div>
+        </div>""",unsafe_allow_html=True)
+
+    st.markdown("<br>",unsafe_allow_html=True)
+    if st.button(t("generate_btn"),use_container_width=True):
+        try:
+            buf=io.BytesIO()
+            with pd.ExcelWriter(buf,engine="openpyxl") as wr:
+                rows=[["AdsorpLab Pro — Analysis Report"],
+                      [t("exp_name"),exp_nm],[t("researcher"),rsr],[t("notes_label"),nts],
+                      ["Generated by","AdsorpLab Pro v2.0"],[]]
+                if "iso_results" in st.session_state:
+                    rows+=[[f"{'═'*15} ISOTHERM RESULTS {'═'*15}"],
+                           ["Best Model",st.session_state.get("iso_best","—")]]
+                    for nm,res in st.session_state["iso_results"].items():
+                        rows+=[[f"{nm} R²",f"{res['r2']:.4f}"],[f"{nm} RMSE",f"{res['rmse']:.4f}"],[f"{nm} χ²",f"{res['chi2']:.4f}"]]
+                        for pk,pv in res["params"].items():
+                            rows.append([f"  {nm} {pk}",f"{pv:.4f}" if isinstance(pv,float) else pv])
+                    rows.append([])
+                if "kin_results" in st.session_state:
+                    rows+=[[f"{'═'*15} KINETIC RESULTS {'═'*15}"],
+                           ["Best Model",st.session_state.get("kin_best","—")]]
+                    for nm,res in st.session_state["kin_results"].items():
+                        rows.append([f"{nm} R²",f"{res['r2']:.4f}"])
+                        for pk,pv in res["params"].items():
+                            rows.append([f"  {nm} {pk}",f"{pv:.4f}"])
+                    rows.append([])
+                if "thermo_results" in st.session_state:
+                    tr=st.session_state["thermo_results"]
+                    rows+=[[f"{'═'*15} THERMODYNAMICS {'═'*15}"],
+                           ["ΔH° (kJ/mol)",f"{tr['delta_H']:.4f}"],
+                           ["ΔS° (J/mol·K)",f"{tr['delta_S']:.4f}"],
+                           ["R²",f"{tr['r2']:.4f}"]]
+                pd.DataFrame(rows).to_excel(wr,sheet_name="Summary",index=False,header=False)
+                if "iso_df" in st.session_state:
+                    st.session_state["iso_df"].to_excel(wr,sheet_name="Isotherm Data",index=False)
+                if "kin_df" in st.session_state:
+                    st.session_state["kin_df"].to_excel(wr,sheet_name="Kinetics Data",index=False)
+                if "thermo_results" in st.session_state:
+                    st.session_state["thermo_results"]["df"].to_excel(wr,sheet_name="Thermodynamics",index=False)
+                comp=[]
+                for nm,res in st.session_state.get("iso_results",{}).items():
+                    comp.append([nm,"Isotherm",f"{res['r2']:.4f}",f"{res['rmse']:.4f}",f"{res['chi2']:.4f}"])
+                for nm,res in st.session_state.get("kin_results",{}).items():
+                    comp.append([nm,"Kinetic",f"{res['r2']:.4f}",f"{res['rmse']:.4f}",f"{res['chi2']:.4f}"])
+                if comp:
+                    pd.DataFrame(comp,columns=["Model","Type","R²","RMSE","χ²"])\
+                        .to_excel(wr,sheet_name="Model Comparison",index=False)
+            buf.seek(0)
+            safe=exp_nm.replace(" ","_").replace("/","-")[:28]
+            st.download_button(t("download_btn"),buf.getvalue(),f"AdsorpLab_{safe}.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",use_container_width=True)
+            st.success(t("report_success"))
+        except Exception as e: st.error(str(e))
+
+    st.markdown("<br>",unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style="font-size:.93rem;font-weight:700;color:{TX};margin-bottom:.75rem;
+        padding-bottom:.45rem;border-bottom:1px solid {BR};font-family:{ff};direction:{fd};">
+        {t("session_results")}
+    </div>""",unsafe_allow_html=True)
+
+    has=any(k in st.session_state for k in["iso_results","kin_results","thermo_results"])
+    if not has:
+        st.markdown(f"""<div style="text-align:center;padding:2.2rem;color:{TXM};font-family:{ff};">
+            <div style="font-size:2rem;margin-bottom:.5rem;">📭</div>
+            <div style="font-size:.87rem;">{t("no_results")}</div></div>""",unsafe_allow_html=True)
+    else:
+        rd1,rd2,rd3=st.columns(3)
+        for col,key,lbl in [(rd1,"iso_results",t("iso_models_lbl")),(rd2,"kin_results",t("kin_models_lbl"))]:
+            with col:
+                if key in st.session_state:
+                    st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{lbl}</b>",unsafe_allow_html=True)
+                    bk=st.session_state.get(key.replace("results","best"),"")
+                    for nm,res in st.session_state[key].items():
+                        ib=(nm==bk)
+                        st.markdown(f"""
+                        <div style="display:flex;justify-content:space-between;align-items:center;
+                            padding:.32rem .65rem;border-radius:8px;margin-bottom:.18rem;
+                            background:{'rgba(34,197,94,0.08)' if ib else CARD};
+                            border:1px solid {SUCBR if ib else BR};">
+                            <span style="color:{TX};font-size:.8rem;font-weight:{'700' if ib else '400'};font-family:{ff};">
+                                {"★ " if ib else ""}{nm}</span>
+                            <span style="color:{'#34d399' if ib else AC};font-family:'JetBrains Mono',monospace;font-size:.8rem;">
+                                {res['r2']:.4f}</span>
+                        </div>""",unsafe_allow_html=True)
+        with rd3:
+            if "thermo_results" in st.session_state:
+                tr=st.session_state["thermo_results"]
+                st.markdown(f"<b style='color:{TXS};font-family:{ff};'>{t('thermo_lbl')}</b>",unsafe_allow_html=True)
+                for lbl,val in [("ΔH°",f"{tr['delta_H']:.3f} kJ/mol"),("ΔS°",f"{tr['delta_S']:.3f} J/mol·K"),("R²",f"{tr['r2']:.4f}")]:
+                    st.markdown(f"""
+                    <div style="display:flex;justify-content:space-between;padding:.32rem .65rem;
+                        border-radius:8px;margin-bottom:.18rem;background:{CARD};border:1px solid {BR};">
+                        <span style="color:{TXM};font-size:.8rem;font-family:{ff};">{lbl}</span>
+                        <span style="color:{AC};font-family:'JetBrains Mono',monospace;font-size:.8rem;">{val}</span>
+                    </div>""",unsafe_allow_html=True)
+
+# ─── Footer ──────────────────────────────────────────────────────────────────
+st.markdown(f"""
+<div class="ada-footer">
+    🔬 AdsorpLab Pro v2.0 &nbsp;·&nbsp;
+    Langmuir · Freundlich · Temkin · D-R · Sips · BET &nbsp;·&nbsp;
+    PFO · PSO · Elovich · Weber-Morris · Arrhenius &nbsp;·&nbsp;
+    R² · RMSE · χ² · Linear Transforms · Auto-Interpretation
+</div>""",unsafe_allow_html=True)
