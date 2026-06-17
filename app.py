@@ -233,7 +233,7 @@ def t(k): return TRANS[st.session_state.lang].get(k, k)
 is_ar   = st.session_state.lang == "ar"
 is_dark = st.session_state.dark
 fd      = "rtl" if is_ar else "ltr"
-ff      = "'Cairo','Inter',sans-serif" if is_ar else "'Inter',sans-serif"
+ff      = "Cairo,Inter,sans-serif" if is_ar else "Inter,sans-serif"
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  THEME TOKENS
