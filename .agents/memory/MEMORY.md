@@ -1,0 +1,2 @@
+---
+- [Streamlit unsafe_allow_html blank line bug](streamlit-html-blank-line.md) — triple-quote f-strings with conditional "" create blank lines that break Python-Markdown HTML block parsing.
