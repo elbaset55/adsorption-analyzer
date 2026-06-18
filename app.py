@@ -855,6 +855,35 @@ with tab_iso:
                         _clr="#34d399" if ib else AC
                         _bdg=f"<span class='ada-badge'>{t('best_fit')}</span>" if ib else ""
                         _r2=f"{res['r2']:.4f}"; _rm=f"{res['rmse']:.4f}"; _ch=f"{res['chi2']:.4f}"
+                        # Model-specific favorability indicator
+                        _fav=""
+                        if nm=="Langmuir":
+                            RL_v=res["params"].get("RL",0.5)
+                            if RL_v<=0:   _fl,_fc="Irreversible","#a78bfa"
+                            elif RL_v<1:  _fl,_fc=f"Favorable \u2714 (RL={RL_v:.3f})","#34d399"
+                            elif RL_v==1: _fl,_fc=f"Linear (RL={RL_v:.3f})","#fbbf24"
+                            else:         _fl,_fc=f"Unfavorable \u26a0 (RL={RL_v:.3f})","#f87171"
+                            _fav=f'<div style="margin-top:.3rem;font-size:.62rem;color:{_fc};font-family:monospace;">\u25cf {_fl}</div>'
+                        elif nm=="Freundlich":
+                            inv_n=res["params"].get("1/n",1.0)
+                            if inv_n<1:   _fl,_fc=f"Favorable \u2714 (1/n={inv_n:.3f})","#34d399"
+                            elif inv_n>1: _fl,_fc=f"Unfavorable \u26a0 (1/n={inv_n:.3f})","#f87171"
+                            else:         _fl,_fc=f"Linear (1/n={inv_n:.3f})","#fbbf24"
+                            _fav=f'<div style="margin-top:.3rem;font-size:.62rem;color:{_fc};font-family:monospace;">\u25cf {_fl}</div>'
+                        elif nm=="D-R":
+                            E_v=res["params"].get("E (kJ/mol)",0); ads_t=res["params"].get("Type","")
+                            _fc="#60a5fa" if "Physi" in ads_t else ("#fbbf24" if "Ion" in ads_t else "#f87171")
+                            _fav=f'<div style="margin-top:.3rem;font-size:.62rem;color:{_fc};font-family:monospace;">\u25cf {ads_t} (E={E_v:.1f} kJ/mol)</div>'
+                        elif nm=="Sips":
+                            ns_v=res["params"].get("ns",1.0)
+                            if abs(ns_v-1)<0.15: _fl,_fc=f"\u2248Langmuir (ns={ns_v:.3f})","#fbbf24"
+                            else:                _fl,_fc=f"Heterogeneous (ns={ns_v:.3f})","#34d399"
+                            _fav=f'<div style="margin-top:.3rem;font-size:.62rem;color:{_fc};font-family:monospace;">\u25cf {_fl}</div>'
+                        elif nm=="Temkin":
+                            bT_v=res["params"].get("bT (J/mol)",0)
+                            _fl="Physisorption" if bT_v<40000 else "Chemisorption"
+                            _fc="#60a5fa" if bT_v<40000 else "#f87171"
+                            _fav=f'<div style="margin-top:.3rem;font-size:.62rem;color:{_fc};font-family:monospace;">\u25cf {_fl} (bT={bT_v:.0f} J/mol)</div>'
                         st.markdown(
                             f'<div class="{_cls}">'
                             f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem;">'
@@ -867,7 +896,7 @@ with tab_iso:
                             f'<div style="color:{TXS};font-family:monospace;font-size:.81rem;">{_rm}</div></div>'
                             f'<div><div style="color:{TXM};font-size:.58rem;">\u03c7\u00b2</div>'
                             f'<div style="color:{TXS};font-family:monospace;font-size:.81rem;">{_ch}</div></div>'
-                            f'</div></div>',
+                            f'</div>{_fav}</div>',
                             unsafe_allow_html=True)
 
                     # Data quality
