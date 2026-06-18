@@ -851,21 +851,24 @@ with tab_iso:
                     srt=sorted(iso_res.items(),key=lambda x:-x[1]["r2"])
                     for rk,(nm,res) in enumerate(srt):
                         ib=(rk==0); ic=icons[min(rk,5)]
-                        st.markdown(f"""
-                        <div class="ada-card {'best' if ib else ''}">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem;">
-                                <span style="font-weight:700;color:{TX};font-size:.87rem;font-family:{ff};">{ic} {nm}</span>
-                                {"<span class='ada-badge'>"+t("best_fit")+"</span>" if ib else ""}
-                            </div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.25rem;">
-                                <div><div style="color:{TXM};font-size:.58rem;">R²</div>
-                                    <div style="color:{'#34d399' if ib else AC};font-family:'JetBrains Mono',monospace;font-size:.81rem;font-weight:700;">{res['r2']:.4f}</div></div>
-                                <div><div style="color:{TXM};font-size:.58rem;">RMSE</div>
-                                    <div style="color:{TXS};font-family:'JetBrains Mono',monospace;font-size:.81rem;">{res['rmse']:.4f}</div></div>
-                                <div><div style="color:{TXM};font-size:.58rem;">χ²</div>
-                                    <div style="color:{TXS};font-family:'JetBrains Mono',monospace;font-size:.81rem;">{res['chi2']:.4f}</div></div>
-                            </div>
-                        </div>""",unsafe_allow_html=True)
+                        _cls="ada-card best" if ib else "ada-card"
+                        _clr="#34d399" if ib else AC
+                        _bdg=f"<span class='ada-badge'>{t('best_fit')}</span>" if ib else ""
+                        _r2=f"{res['r2']:.4f}"; _rm=f"{res['rmse']:.4f}"; _ch=f"{res['chi2']:.4f}"
+                        st.markdown(
+                            f'<div class="{_cls}">'
+                            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem;">'
+                            f'<span style="font-weight:700;color:{TX};font-size:.87rem;font-family:{ff};">{ic} {nm}</span>{_bdg}'
+                            f'</div>'
+                            f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.25rem;">'
+                            f'<div><div style="color:{TXM};font-size:.58rem;">R\u00b2</div>'
+                            f'<div style="color:{_clr};font-family:monospace;font-size:.81rem;font-weight:700;">{_r2}</div></div>'
+                            f'<div><div style="color:{TXM};font-size:.58rem;">RMSE</div>'
+                            f'<div style="color:{TXS};font-family:monospace;font-size:.81rem;">{_rm}</div></div>'
+                            f'<div><div style="color:{TXM};font-size:.58rem;">\u03c7\u00b2</div>'
+                            f'<div style="color:{TXS};font-family:monospace;font-size:.81rem;">{_ch}</div></div>'
+                            f'</div></div>',
+                            unsafe_allow_html=True)
 
                     # Data quality
                     st.markdown(f"<br><b style='color:{TXS};font-family:{ff};'>{t('data_quality')}</b>",unsafe_allow_html=True)
@@ -1114,21 +1117,24 @@ with tab_kin:
                     icons=["🥇","🥈","🥉","🔹"]
                     for rk,(nm,res) in enumerate(sorted(kin_res.items(),key=lambda x:-x[1]["r2"])):
                         ib=(rk==0); ic=icons[min(rk,3)]
-                        st.markdown(f"""
-                        <div class="ada-card {'best' if ib else ''}">
-                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem;">
-                                <span style="font-weight:700;color:{TX};font-size:.87rem;font-family:{ff};">{ic} {nm}</span>
-                                {"<span class='ada-badge'>"+t("best_fit")+"</span>" if ib else ""}
-                            </div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.25rem;">
-                                <div><div style="color:{TXM};font-size:.58rem;">R²</div>
-                                    <div style="color:{'#34d399' if ib else AC};font-family:'JetBrains Mono',monospace;font-size:.81rem;font-weight:700;">{res['r2']:.4f}</div></div>
-                                <div><div style="color:{TXM};font-size:.58rem;">RMSE</div>
-                                    <div style="color:{TXS};font-family:'JetBrains Mono',monospace;font-size:.81rem;">{res['rmse']:.4f}</div></div>
-                                <div><div style="color:{TXM};font-size:.58rem;">χ²</div>
-                                    <div style="color:{TXS};font-family:'JetBrains Mono',monospace;font-size:.81rem;">{res['chi2']:.4f}</div></div>
-                            </div>
-                        </div>""",unsafe_allow_html=True)
+                        _cls="ada-card best" if ib else "ada-card"
+                        _clr="#34d399" if ib else AC
+                        _bdg=f"<span class='ada-badge'>{t('best_fit')}</span>" if ib else ""
+                        _r2=f"{res['r2']:.4f}"; _rm=f"{res['rmse']:.4f}"; _ch=f"{res['chi2']:.4f}"
+                        st.markdown(
+                            f'<div class="{_cls}">'
+                            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.35rem;">'
+                            f'<span style="font-weight:700;color:{TX};font-size:.87rem;font-family:{ff};">{ic} {nm}</span>{_bdg}'
+                            f'</div>'
+                            f'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.25rem;">'
+                            f'<div><div style="color:{TXM};font-size:.58rem;">R\u00b2</div>'
+                            f'<div style="color:{_clr};font-family:monospace;font-size:.81rem;font-weight:700;">{_r2}</div></div>'
+                            f'<div><div style="color:{TXM};font-size:.58rem;">RMSE</div>'
+                            f'<div style="color:{TXS};font-family:monospace;font-size:.81rem;">{_rm}</div></div>'
+                            f'<div><div style="color:{TXM};font-size:.58rem;">\u03c7\u00b2</div>'
+                            f'<div style="color:{TXS};font-family:monospace;font-size:.81rem;">{_ch}</div></div>'
+                            f'</div></div>',
+                            unsafe_allow_html=True)
 
                     st.markdown(f"<br><b style='color:{TXS};font-family:{ff};'>{t('parameters')}</b>",unsafe_allow_html=True)
                     for nm,res in sorted(kin_res.items(),key=lambda x:-x[1]["r2"]):
